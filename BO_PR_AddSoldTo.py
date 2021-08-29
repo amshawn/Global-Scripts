@@ -25,6 +25,16 @@ def getCustomerId(soldToName):
 
 #add sold to to table
 def addSoldTo():
+	isRequired = False
+	#check whether all customer group
+	for attr in Quote.GetCustomField('BO_CF_RCPT_OPT').AttributeValues:
+		if attr.DisplayValue == Quote.GetCustomField('BO_CF_RCPT_OPT').Content:
+			if attr.ValueCode == "1": #1 sold-to
+				isRequired = False
+			else: #all sold-to
+				isRequired = True
+			break
+
 	#get sold to name
 	soldToName  = Quote.GetCustomField('BO_CF_SOLD_TO').Content
 	#sold-to field has entry
@@ -39,11 +49,17 @@ def addSoldTo():
 		newRow.Cells['NAME'].Value  = soldToName
 		#set external to column -> Sapid
 		newRow.Cells['SAPID'].Value = soldToId
+		#set required column
+		if isRequired:
+			newRow.Cells['REQUIRED'].Value = "0"
+		else:
+			newRow.Cells['REQUIRED'].Value = "1"
 		#save changes to quote table
 		soldToTable.Save()
 		#reset sold-to field
-		#Quote.GetCustomField('BO_CF_SOLD_TO').Content = ""
-		#Quote.CustomFields.Reset("BO_CF_SOLD_TO")
+		Quote.CustomFields.Disallow("BO_CF_SOLD_TO")
+		Quote.CustomFields.Allow("BO_CF_SOLD_TO")
+		Quote.CalculateAndSaveCustomFields()
 #Filter on sold to--------------------------------------------------------------
 		mylist = []
 		#get sold-to already used
