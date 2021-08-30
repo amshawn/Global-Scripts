@@ -13,7 +13,7 @@ Dev: Shawn Yong, 25/07/2021, US 2215
 """
 
 #get external id of sold to from master data table
-def getCustomerId(soldToName):
+def getCustomer(soldToName):
 	table = SqlHelper.GetFirst("""
 	SELECT *
 	FROM MG_CUSTOMERS
@@ -21,7 +21,7 @@ def getCustomerId(soldToName):
 	AND CUSTOMER_TYPE = '1'
 	AND ACTIVE = 'TRUE'
 	""".format(company=soldToName))
-	return table.CUSTOMERID if table else ""
+	return table.CUSTOMERID, table.COUNTRY_ABBREV if table else ""
 
 #add sold to to table
 def addSoldTo():
@@ -40,15 +40,17 @@ def addSoldTo():
 	#sold-to field has entry
 	if soldToName:
 		#get external for sold to
-		soldToId	= getCustomerId(soldToName.split(",")[1].lstrip())
+		soldToId, ctryCode	= getCustomer(soldToName.split(",")[1].lstrip())
 		#get sold-to table
 		soldToTable = Quote.QuoteTables['BO_SOLDTO']
 		#add new row to sold-to table
 		newRow = soldToTable.AddNewRow()
 		#set sold-to to column -> Name
-		newRow.Cells['NAME'].Value  = soldToName
-		#set external to column -> Sapid
-		newRow.Cells['SAPID'].Value = soldToId
+		newRow.Cells['NAME'].Value  = soldToName.split(",")[1].lstrip()
+		#set customer number to column -> Sapid
+		newRow.Cells['SAPID'].Value = soldToId.lstrip("0")
+		#set country code to column
+		newRow.Cells['COUNTRY'].Value = ctryCode
 		#set required column
 		if isRequired:
 			newRow.Cells['REQUIRED'].Value = "0"
