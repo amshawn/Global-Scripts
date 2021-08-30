@@ -87,6 +87,8 @@ if 1 == 1:
 			rebateRecpt 		= ""
 			#set rebate recipient code
 			recipientOptCode	= ""
+			#init rebate recipient name
+			rebateRecptName		= ""
 			if agrType == "End Customer":#rebate recipient = end customer
 				rebateRecpt	    = Quote.GetCustomField('BO_CF_END_CUSTOMER').Content
 			else:#rebate recipient  = sold-to
