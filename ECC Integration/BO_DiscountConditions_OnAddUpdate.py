@@ -37,7 +37,7 @@ def get_ConditionItems(condType, uom, currency, rate):
 	conditionItems["ConditionScale"] 		= get_ConditionScale()
 	return conditionItems
 
-def get_conditionHeader(startDate, endDate):
+def get_conditionHeader(condType, startDate, endDate):
 	conditionHeader = dict()
 	conditionHeader["ValidFrom"] 		= str(startDate)
 	conditionHeader["ValidTo"] 			= str(endDate)
@@ -54,17 +54,18 @@ def get_price_content(tableNum, condType, variableKey, sOrg, distCh, divOrg):
 	price_content["SalesOrg"] 		 = str(sOrg)
 	price_content["DistChan"] 		 = str(distCh)
 	price_content["Division"] 		 = str(divOrg)
-	price_content["ConditionHeader"] = get_conditionHeader(startDate, endDate)
+	price_content["ConditionHeader"] = get_conditionHeader(condType, startDate, endDate)
 	return price_content
 
 # get access sequence from BO_DISCOUNT_CONDITIONS, based on configuration
 def get_Discount_Conditions(sold2, shipTo2, endCust2, endUseObject2, condTypeFull):
 	sqlResult 	= SqlHelper.GetSingle("""SELECT *
-										WHERE SOLD_TO = '%s'
-										AND	SHIP_TO = '%s'
-										AND	END_USER = '%s'
-										AND END_USE_OBJECT = '%s'
-										AND	COND_TYPE_FULL = '%s'""" %(sold2, shipTo2, endCust2, endUseObject2, condTypeFull))
+										FROM BO_DISCOUNT_CONDITIONS
+										WHERE SOLD_TO = '{}'
+										AND	SHIP_TO = '{}'
+										AND	END_USER = '{}'
+										AND END_USE_OBJECT = '{}'
+										AND	COND_TYPE_FULL = '{}'""".format(sold2, shipTo2, endCust2, endUseObject2, condTypeFull))
 
 	# Store condition type, priority, table number in variables
 	condType	= sqlResult.COND_TYPE
@@ -181,8 +182,12 @@ try:
 					# get the currency
 					if ct[-1:] == "%":
 						currency = "%"
+						# get the price for material
+						rate = float(discountValue[ct]) * 10
 					else:
 						currency = currency
+						# get the price for material
+						rate = discountValue[ct]
 					#currency = "%"
 
 					# transform Condition Pricing Unit
@@ -190,9 +195,6 @@ try:
 						condPricUnit = ""
 					else:
 						condPricUnit = 1
-
-					# get the price for material
-					rate = discountValue[ct]
 
 					# check if Sold-To list is not empty
 					if allSoldToList:
