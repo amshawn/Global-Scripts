@@ -96,6 +96,7 @@ try:
 
 	# define quote table for pricing conditions
 	pricQuoteTable 	= Quote.QuoteTables["BO_QTB_PRICING_COND"]
+	rebateQt 		= Quote.QuoteTables["BO_REBATES"]
 	# Loop in Pricing Conditions Quote Table
 	for row in pricQuoteTable.Rows:
 		if row["Status"] != "Sent to PO":
