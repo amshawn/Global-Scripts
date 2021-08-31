@@ -204,7 +204,7 @@ try:
 						if allSoldToList:
 							for soldTos in allSoldToList:
 								# build variable key
-								variableKey = sOrg + distCh + divOrg + soldTos[3:-1] + matCode
+								variableKey = sOrg + distCh + divOrg + soldTos[4:-1] + matCode
 								# add the pricing content to 'condition key'
 								conditionKey.append(get_price_content(tableNum, condType, variableKey, sOrg, distCh, divOrg))
 
@@ -212,7 +212,7 @@ try:
 						if allShipToList:
 							for shipTos in allShipToList:
 								# build variable key
-								variableKey = sOrg + distCh + divOrg + shipTos[3:-1] + matCode
+								variableKey = sOrg + distCh + divOrg + shipTos[4:-1] + matCode
 								# add the pricing content to 'condition key'
 								conditionKey.append(get_price_content(tableNum, condType, variableKey, sOrg, distCh, divOrg))
 					except Exception as eee:
