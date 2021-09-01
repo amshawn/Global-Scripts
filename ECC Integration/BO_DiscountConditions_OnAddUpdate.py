@@ -29,11 +29,15 @@ def get_ConditionItems(condType, uom, currency, rate):
 	conditionItems["ScaleType"] 			= ""
 	conditionItems["ScaleIndicator"] 		= ""
 	conditionItems["ScaleConditionUnit"] 	= ""
-	conditionItems["CalculationType"] 		= "C"
+	if condType[len(condType)-1] == "%":
+		conditionItems["CalculationType"] 	= "A"
+		conditionItems["ConditionUnit"] 	= ""
+	else:
+		conditionItems["CalculationType"] 	= "C"
+		conditionItems["ConditionUnit"] 	= str(uom)
 	conditionItems["Rate"] 					= str(rate)
 	conditionItems["RateUnit"] 				= str(currency)
 	conditionItems["ConditionPricingUnit"] 	= condPricUnit
-	conditionItems["ConditionUnit"] 		= str(uom)
 	conditionItems["ConditionScale"] 		= get_ConditionScale()
 	return conditionItems
 
@@ -81,6 +85,44 @@ def price_cond(conditionKey):
 	priceCond["ConditionKey"]	= conditionKey
 	return priceCond
 
+#build variable key
+def getVarKey(variableKey,
+				erpTable,
+				soldTos, 	#Sold-to party
+				shipTos,	#Ship-to party
+				sOrg,		#sales organisation
+				distCh, 	#Distribution Channel
+				matCode,	#Pricing Ref. Matl
+				endCust,	#End user
+				endObj		#end use object
+				):
+	#buid variable key
+	for line in erpTable:
+		if line.SAP_FIELD == "VKORG": #sales organisation
+			variableKey = variableKey + sOrg
+		elif line.SAP_FIELD == "VTWEG": #Distribution Channel
+			variableKey = variableKey + distCh
+		elif line.SAP_FIELD == "SPART": #Division
+			variableKey = variableKey + divOrg
+		elif line.SAP_FIELD == "KUNNR": #Sold-to party
+			variableKey = variableKey + soldTos.zfill(line.LENGTH)
+		elif line.SAP_FIELD == "PMATN": #Pricing Ref. Matl
+			variableKey = variableKey + matCode.ljust(line.LENGTH)
+		elif line.SAP_FIELD == "KUNWE": #Ship-to party
+			variableKey = variableKey + shipTos.zfill(line.LENGTH)
+		elif line.SAP_FIELD == "ZZCUSZE": #End user
+			variableKey = variableKey + endCust.zfill(line.LENGTH)
+		elif line.SAP_FIELD == "ZZVCENDUSEOBJCT": #end use object
+			variableKey = variableKey + endObj.ljust(line.LENGTH)
+		elif line.SAP_FIELD == "LAND1": #Destination Country
+			variableKey = variableKey + " ".ljust(line.LENGTH)
+		elif line.SAP_FIELD == "ZZCUSZS": #Sales company
+			variableKey = variableKey + " ".ljust(line.LENGTH)
+		elif line.SAP_FIELD == "ZZHIEZU01": #CustomerHierarchy01
+			variableKey = variableKey + "".zfill(line.LENGTH)
+		elif line.SAP_FIELD == "ZZVCPACKMTYP": #packing main type ['RP', 'PL']
+			variableKey = variableKey + " ".ljust(line.LENGTH)
+	return variableKey
 
 # Harded coded for testing purposes, as the info is not on CPQ yet
 #/!\# to change - Start #/!\#
@@ -112,7 +154,9 @@ try:
 		soldTo 			= Product.Attributes.GetByName("MG_SOLD_TO").GetValue()
 		shipTo 			= Product.Attributes.GetByName("MG_SHIP_TO").GetValue()
 		endCust 		= Product.Attributes.GetByName("MG_END_CUSTOMER").GetValue()
+		endCustCde		= Product.Attributes.GetByName("MG_END_CUSTOMER").SelectedValue.ValueCode[4:] if Product.Attributes.GetByName("MG_END_CUSTOMER").SelectedValue else ""
 		endUseObject 	= Product.Attributes.GetByName("MG_END_USE_OBJECT").GetValue()
+		endObjCde		= Product.Attributes.GetByName("MG_END_USE_OBJECT").SelectedValue.ValueCode if Product.Attributes.GetByName("MG_END_USE_OBJECT").SelectedValue else ""
 
 		# check if attribute is empty, else assign 'X'
 		sold2  			= "" if (soldTo is None or soldTo == "") else "X"
@@ -173,6 +217,8 @@ try:
 
 		# Build the Pricing structure
 		for matCode in pricingMatCodeList:
+			# initialize variable key
+			varKey = ""
 			# loop in each discount
 			if discountCodeList:
 				for ct in discountCodeList:
@@ -181,38 +227,68 @@ try:
 
 					# get the currency
 					if ct[-1:] == "%":
-						currency = "%"
-						# get the price for material
-						rate = float(discountValue[ct]) * 10
-					else:
-						currency = currency
-						# get the price for material
-						rate = discountValue[ct]
-					#currency = "%"
-
-					# transform Condition Pricing Unit
-					if currency == '%':
+						currency = "P1"
 						condPricUnit = ""
 					else:
+						currency = currency
 						condPricUnit = 1
+
+					# get the price for material
+					rate = discountValue[ct]
+
+
+					if tableNum == "":
+						Trace.Write("sold2{} shipTo2{} endCust2{} endUseObject2{} s{}".format(sold2, shipTo2, endCust2, endUseObject2, s))
+						continue
+#BUILDING VARIABLE KEY----------------------------------------------------------
+					#get fields to build the access sequence
+					erpTable = getErpTable(tableNum)
 
 					# check if Sold-To list is not empty
 					if allSoldToList:
 						for soldTos in allSoldToList:
-							# build variable key
-							variableKey = sOrg + distCh + divOrg + soldTos[4:-1] + matCode
-							# add the pricing content to 'condition key'
-							conditionKey.append(get_price_content(tableNum, ct, variableKey, sOrg, distCh, divOrg))
-					# check if Ship-To list is not empty
-					if allShipToList:
-						for shipTos in allShipToList:
-							# build variable key
-							variableKey = sOrg + distCh + divOrg + shipTos[4:-1] + matCode
-							# add the pricing content to 'condition key'
-							conditionKey.append(get_price_content(tableNum, ct, variableKey, sOrg, distCh, divOrg))
+							# check if Ship-To list is not empty
+							if allShipToList:
+								for shipTos in allShipToList:
+									varKey = getVarKey(varKey,
+														erpTable,
+														soldTos[4:-1], 	#Sold-to party
+														shipTos[4:-1],	#Ship-to party
+														sOrg,			#sales organisation
+														distCh, 		#Distribution Channel
+														matCode,		#Pricing Ref. Matl
+														endCustCde,		#End user
+														endObjCde		#end use object
+														)
+									conditionKey.append(get_price_content(tableNum, condType, varKey, sOrg, distCh, divOrg))
+									varKey = ""
+							else:
+								varKey = getVarKey(varKey,
+													erpTable,
+													soldTos[4:-1], 	#Sold-to party
+													"",				#Ship-to party
+													sOrg,			#sales organisation
+													distCh, 		#Distribution Channel
+													matCode,		#Pricing Ref. Matl
+													endCustCde,		#End user
+													endObjCde		#end use object
+													)
+								conditionKey.append(get_price_content(tableNum, condType, varKey, sOrg, distCh, divOrg))
+								varKey = ""
+					else:
+						varKey = getVarKey(varKey,
+											erpTable,
+											"",				#Sold-to party
+											"",				#Ship-to party
+											sOrg,			#sales organisation
+											distCh, 		#Distribution Channel
+											matCode,		#Pricing Ref. Matl
+											endCustCde,		#End user
+											endObjCde		#end use object
+											)
+						conditionKey.append(get_price_content(tableNum, condType, varKey, sOrg, distCh, divOrg))
+						varKey = ""
 
-		# Check the data
-		# d = RestClient.SerializeToJson(conditionKey)
 
 		# build pricing data
 		pricingData	 = price_cond(conditionKey)
