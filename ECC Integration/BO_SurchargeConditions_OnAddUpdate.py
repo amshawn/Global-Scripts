@@ -75,9 +75,9 @@ def get_Surcharge_Conditions(sold2, shipTo2, endCust2, endUseObject2, condType):
 									ORDER BY ACCESS ASC """ %(sold2, shipTo2, endCust2, endUseObject2, condType))
 
 	# Store condition type, priority, table number in variables
-	condType	= sqlResult.COND_TYPE
-	priority	= sqlResult.ACCESS
-	tableNum	= sqlResult.TABLE_NUM
+	condType	= sqlResult.COND_TYPE if sqlResult else ""
+	priority	= sqlResult.ACCESS if sqlResult else ""
+	tableNum	= sqlResult.TABLE_NUM if sqlResult else ""
 	return condType, priority, tableNum
 
 # build amount and scale_min list
@@ -99,17 +99,8 @@ def getErpTable(tableNum):
 	table = SqlHelper.GetList("""
 	SELECT *
 	FROM MG_TABLE_ECC
-	WHERE TABLE = '{table}'
-	""".format(table=tableNum))
-	return table
-
-#get ECC fields for table
-def getErpTable(tableNum):
-	table = SqlHelper.GetList("""
-	SELECT *
-	FROM MG_TABLE_ECC
-	WHERE TABLE = '{table}'
-	""".format(table=tableNum))
+	WHERE TABLE_NAME = '{tableName}'
+	""".format(tableName=tableNum))
 	return table
 
 #build variable key
@@ -126,21 +117,21 @@ def getVarKey(variableKey,
 	#buid variable key
 	for line in erpTable:
 		if line.SAP_FIELD == "VKORG": #sales organisation
-			variableKey = variableKey + sOrg[:line.LENGTH-1]
+			variableKey = variableKey + sOrg
 		elif line.SAP_FIELD == "VTWEG": #Distribution Channel
-			variableKey = variableKey + distCh[:line.LENGTH-1]
+			variableKey = variableKey + distCh
 		elif line.SAP_FIELD == "SPART": #Division
-			variableKey = variableKey + divOrg[:line.LENGTH-1]
+			variableKey = variableKey + divOrg
 		elif line.SAP_FIELD == "KUNNR": #Sold-to party
 			variableKey = variableKey + soldTos
 		elif line.SAP_FIELD == "PMATN": #Pricing Ref. Matl
-			variableKey = variableKey + matCode[:line.LENGTH-1]
+			variableKey = variableKey + matCode
 		elif line.SAP_FIELD == "KUNWE": #Ship-to party
 			variableKey = variableKey + shipTos
 		elif line.SAP_FIELD == "ZZCUSZE": #End user
-			variableKey = variableKey + endCust
+			variableKey = variableKey + endCust.zfill(10)
 		elif line.SAP_FIELD == "ZZVCENDUSEOBJCT": #end use object
-			variableKey = variableKey + endObj[:line.LENGTH-1]
+			variableKey = variableKey + endObj
 		elif line.SAP_FIELD == "AUART": #Order Type
 			variableKey = variableKey + ""
 		elif line.SAP_FIELD == "LAND1": #Destination Country
@@ -273,10 +264,10 @@ try:
 
 		# Define condition key list
 		conditionKey = list()
-		# initialize variable key
-		varKey = ""
 		# Build the Surcharge structure
 		for matCode in pricingMatCodeList:
+			# initialize variable key
+			varKey = ""
 			# check if there are surcharges
 			if surchargeList:
 				for s in surchargeList:
@@ -285,52 +276,61 @@ try:
 					scaleMin	= surchargePriceRate[s][0]
 					# get the amount for each surcharge
 					rate		= surchargePriceRate[s][1]
+					# get values // sql select -> to optimise
+					# if no corresponding condition is met in custom table, it will skip
+					condType, priority, tableNum = get_Surcharge_Conditions(sold2, shipTo2, endCust2, endUseObject2, s)
 
-					try:
-						# get values // sql select -> to optimise
-						# if no corresponding condition is met in custom table, it will skip
-						condType, priority, tableNum = get_Surcharge_Conditions(sold2, shipTo2, endCust2, endUseObject2, s)
+					if tableNum == "":
+						Trace.Write("sold2{} shipTo2{} endCust2{} endUseObject2{} s{}".format(sold2, shipTo2, endCust2, endUseObject2, s))
+						continue
 #BUILDING VARIABLE KEY----------------------------------------------------------
-						#get fields to build the access sequence
-						erpTable = getErpTable(tableNum)
+					#get fields to build the access sequence
+					erpTable = getErpTable(tableNum)
 
-						# check if Sold-To list is not empty
-						if allSoldToList:
-							for soldTos in allSoldToList:
-								# check if Ship-To list is not empty
-								if allShipToList:
-									for shipTos in allShipToList:
-										varKey = getVarKey(varKey,
-															erpTable,
-															soldTos[4:], 	#Sold-to party
-															shipTos[4:],	#Ship-to party
-															sOrg,			#sales organisation
-															distCh, 		#Distribution Channel
-															matCode,		#Pricing Ref. Matl
-															endCustCde,		#End user
-															endObjCde		#end use object
-															)
-										conditionKey.append(get_price_content(tableNum, condType, varKey, sOrg, distCh, divOrg))
-								else:
+					# check if Sold-To list is not empty
+					if allSoldToList:
+						for soldTos in allSoldToList:
+							# check if Ship-To list is not empty
+							if allShipToList:
+								for shipTos in allShipToList:
 									varKey = getVarKey(varKey,
 														erpTable,
-														soldTos[4:], 	#Sold-to party
-														"",				#Ship-to party
+														soldTos[4:-1], 	#Sold-to party
+														shipTos[4:-1],	#Ship-to party
 														sOrg,			#sales organisation
 														distCh, 		#Distribution Channel
 														matCode,		#Pricing Ref. Matl
-														endCust,		#End user
+														endCustCde,		#End user
 														endObjCde		#end use object
 														)
 									conditionKey.append(get_price_content(tableNum, condType, varKey, sOrg, distCh, divOrg))
-
-					except Exception as eee:
-						Trace.Write("Error in BO_SurchargeConditions_OnAddUpdate --> " +str(eee))
-						Trace.Write("Surcharge code: " +str(s) + " error.")
-
-					# # if not matching condType, break the loop
-					# break
-
+									varKey = ""
+							else:
+								varKey = getVarKey(varKey,
+													erpTable,
+													soldTos[4:-1], 	#Sold-to party
+													"",				#Ship-to party
+													sOrg,			#sales organisation
+													distCh, 		#Distribution Channel
+													matCode,		#Pricing Ref. Matl
+													endCustCde,		#End user
+													endObjCde		#end use object
+													)
+								conditionKey.append(get_price_content(tableNum, condType, varKey, sOrg, distCh, divOrg))
+								varKey = ""
+					else:
+						varKey = getVarKey(varKey,
+											erpTable,
+											"",				#Sold-to party
+											"",				#Ship-to party
+											sOrg,			#sales organisation
+											distCh, 		#Distribution Channel
+											matCode,		#Pricing Ref. Matl
+											endCustCde,		#End user
+											endObjCde		#end use object
+											)
+						conditionKey.append(get_price_content(tableNum, condType, varKey, sOrg, distCh, divOrg))
+						varKey = ""
 		# build pricing data
 		pricingData	 = price_cond(conditionKey)
 		# serialize the data
