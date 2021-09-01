@@ -103,16 +103,29 @@ def getErpTable(tableNum):
 	""".format(tableName=tableNum))
 	return table
 
+#get multipliers
+def getMultipliers():
+	table = SqlHelper.GetList("""
+	SELECT *
+	FROM MG_MULTIPLIERS_ECC
+	""".format(sapField=field))
+	return table
+
 #build variable key
 def getVarKey(variableKey,
 				erpTable,
-				soldTos, 	#Sold-to party
-				shipTos,	#Ship-to party
-				sOrg,		#sales organisation
-				distCh, 	#Distribution Channel
-				matCode,	#Pricing Ref. Matl
-				endCust,	#End user
-				endObj		#end use object
+				soldTos, 		#Sold-to party
+				shipTos,		#Ship-to party
+				sOrg,			#sales organisation
+				distCh, 		#Distribution Channel
+				matCode,		#Pricing Ref. Matl
+				endCust,		#End user
+				endObj,			#end use object
+				ctry,			#destination country
+				currency,		#Document Currency
+				cat,			#Brand Category
+				region,			#Region
+				record			#Multipliers
 				):
 	#buid variable key
 	for line in erpTable:
@@ -123,55 +136,29 @@ def getVarKey(variableKey,
 		elif line.SAP_FIELD == "SPART": #Division
 			variableKey = variableKey + divOrg
 		elif line.SAP_FIELD == "KUNNR": #Sold-to party
-			variableKey = variableKey + soldTos
+			variableKey = variableKey + soldTos.zfill(line.LENGTH)
 		elif line.SAP_FIELD == "PMATN": #Pricing Ref. Matl
-			variableKey = variableKey + matCode
+			variableKey = variableKey + matCode.ljust(line.LENGTH)
 		elif line.SAP_FIELD == "KUNWE": #Ship-to party
-			variableKey = variableKey + shipTos
+			variableKey = variableKey + shipTos.zfill(line.LENGTH)
 		elif line.SAP_FIELD == "ZZCUSZE": #End user
-			variableKey = variableKey + endCust.zfill(10)
+			variableKey = variableKey + endCust.zfill(line.LENGTH)
 		elif line.SAP_FIELD == "ZZVCENDUSEOBJCT": #end use object
-			variableKey = variableKey + endObj
+			variableKey = variableKey + endObj.ljust(line.LENGTH)
 		elif line.SAP_FIELD == "AUART": #Order Type
 			variableKey = variableKey + ""
 		elif line.SAP_FIELD == "LAND1": #Destination Country
-			variableKey = variableKey + ""
+			variableKey = variableKey + ctry.ljust(line.LENGTH)
 		elif line.SAP_FIELD == "WAERK": #Document Currency
-			variableKey = variableKey + ""
+			variableKey = variableKey + currency
 		elif line.SAP_FIELD == "ZZBRAND_CATEGORY": #Brand Category
-			variableKey = variableKey + ""
-		elif line.SAP_FIELD == "ZZCONVERTER": #Converter
-			variableKey = variableKey + ""
-		elif line.SAP_FIELD == "ZZCRDIALVL": #Core Diameter Level
-			variableKey = variableKey + ""
+			variableKey = variableKey + cat.ljust(line.LENGTH)
+		elif record.SAP_FIELD == line.SAP_FIELD:
+			variableKey = variableKey + record.VALUE.ljust(line.LENGTH)
 		elif line.SAP_FIELD == "ZZCUSZS": #Sales company
-			variableKey = variableKey + ""
+			variableKey = variableKey + soldTos.zfill(line.LENGTH)
 		elif line.SAP_FIELD == "ZZHIEZU01": #CustomerHierarchy01
-			variableKey = variableKey + ""
-		elif line.SAP_FIELD == "ZZLABEL_ENVIR": #Label environment
-			variableKey = variableKey + ""
-		elif line.SAP_FIELD == "ZZLEADLVL": #Lead Time Level
-			variableKey = variableKey + ""
-		elif line.SAP_FIELD == "ZZLOADLVL": #Load Level
-			variableKey = variableKey + ""
-		elif line.SAP_FIELD == "ZZPLHGTLVL": #Pallet Height Level
-			variableKey = variableKey + ""
-		elif line.SAP_FIELD == "ZZREGION": #Region
-			variableKey = variableKey + ""
-		elif line.SAP_FIELD == "ZZRLDIALVL": #Reel Diameter Level
-			variableKey = variableKey + ""
-		elif line.SAP_FIELD == "ZZRLWIDLVL": #Reel Width Level
-			variableKey = variableKey + ""
-		elif line.SAP_FIELD == "ZZSHLENLVL": #Sheet Length Level
-			variableKey = variableKey + ""
-		elif line.SAP_FIELD == "ZZSHWIDLVL": #Sheet Width Level
-			variableKey = variableKey + ""
-		elif line.SAP_FIELD == "ZZVCPACKMTYP": #packing main type
-			variableKey = variableKey + ""
-		elif line.SAP_FIELD == "ZZVCPALLET_TYPE": #Pallet Type
-			variableKey = variableKey + ""
-		elif line.SAP_FIELD == "ZZVCSHREAMWRAP": #sheet ream wrapping
-			variableKey = variableKey + ""
+			variableKey = variableKey + " ".zfill(line.LENGTH)
 	return variableKey
 
 
@@ -207,6 +194,12 @@ try:
 		endCustCde		= Product.Attributes.GetByName("MG_END_CUSTOMER").SelectedValue.ValueCode[4:] if Product.Attributes.GetByName("MG_END_CUSTOMER").SelectedValue else ""
 		endUseObject 	= Product.Attributes.GetByName("MG_END_USE_OBJECT").GetValue()
 		endObjCde		= Product.Attributes.GetByName("MG_END_USE_OBJECT").SelectedValue.ValueCode if Product.Attributes.GetByName("MG_END_USE_OBJECT").SelectedValue else ""
+		#get destination Country
+		ctry 			= Product.Attributes.GetByName('BO_COUNTRY_PROFITABILITY_CALC').SelectedValue.ValueCode if Product.Attributes.GetByName('BO_COUNTRY_PROFITABILITY_CALC').SelectedValue else " "
+		#get Region
+		region 			= Quote.SelectedMarket.MarketCode.split("_")[0]
+		#get Category
+		cat				= Product.PartNumber
 		# check if attribute is empty, else assign 'X'
 		sold2  			= "" if (soldTo is None or soldTo == "") else "X"
 		shipTo2 		= "" if (shipTo is None or shipTo == "") else "X"
@@ -262,6 +255,9 @@ try:
 					# Build surchargePriceRate dictionary of values {surchargeCode : [scale_min, rate]}
 					surchargePriceRate[surchargeCode] = get_PriceRateList(scale_min, rate)
 
+		#get multipliers
+		multipliers = getMultipliers()
+
 		# Define condition key list
 		conditionKey = list()
 		# Build the Surcharge structure
@@ -286,51 +282,68 @@ try:
 #BUILDING VARIABLE KEY----------------------------------------------------------
 					#get fields to build the access sequence
 					erpTable = getErpTable(tableNum)
-
 					# check if Sold-To list is not empty
 					if allSoldToList:
 						for soldTos in allSoldToList:
 							# check if Ship-To list is not empty
 							if allShipToList:
 								for shipTos in allShipToList:
+									for record in multipliers:
+										varKey = getVarKey(varKey,
+															erpTable,
+															soldTos[4:-1], 	#Sold-to party
+															shipTos[4:-1],	#Ship-to party
+															sOrg,			#sales organisation
+															distCh, 		#Distribution Channel
+															matCode,		#Pricing Ref. Matl
+															endCustCde,		#End user
+															endObjCde,		#end use object
+															ctry,			#destination country
+															currency,		#Document Currency
+															cat,			#Brand Category
+															region,			#Region
+															record			#Multipliers
+															)
+										conditionKey.append(get_price_content(tableNum, condType, varKey, sOrg, distCh, divOrg))
+										varKey = ""
+							else:
+								for record in multipliers:
 									varKey = getVarKey(varKey,
 														erpTable,
 														soldTos[4:-1], 	#Sold-to party
-														shipTos[4:-1],	#Ship-to party
+														"",				#Ship-to party
 														sOrg,			#sales organisation
 														distCh, 		#Distribution Channel
 														matCode,		#Pricing Ref. Matl
 														endCustCde,		#End user
-														endObjCde		#end use object
+														endObjCde,		#end use object
+														ctry,			#destination country
+														currency,		#Document Currency
+														cat,			#Brand Category
+														region,			#Region
+														record			#Multipliers
 														)
 									conditionKey.append(get_price_content(tableNum, condType, varKey, sOrg, distCh, divOrg))
 									varKey = ""
-							else:
-								varKey = getVarKey(varKey,
-													erpTable,
-													soldTos[4:-1], 	#Sold-to party
-													"",				#Ship-to party
-													sOrg,			#sales organisation
-													distCh, 		#Distribution Channel
-													matCode,		#Pricing Ref. Matl
-													endCustCde,		#End user
-													endObjCde		#end use object
-													)
-								conditionKey.append(get_price_content(tableNum, condType, varKey, sOrg, distCh, divOrg))
-								varKey = ""
 					else:
-						varKey = getVarKey(varKey,
-											erpTable,
-											"",				#Sold-to party
-											"",				#Ship-to party
-											sOrg,			#sales organisation
-											distCh, 		#Distribution Channel
-											matCode,		#Pricing Ref. Matl
-											endCustCde,		#End user
-											endObjCde		#end use object
-											)
-						conditionKey.append(get_price_content(tableNum, condType, varKey, sOrg, distCh, divOrg))
-						varKey = ""
+						for record in multipliers:
+							varKey = getVarKey(varKey,
+												erpTable,
+												"",				#Sold-to party
+												"",				#Ship-to party
+												sOrg,			#sales organisation
+												distCh, 		#Distribution Channel
+												matCode,		#Pricing Ref. Matl
+												endCustCde,		#End user
+												endObjCde,		#end use object
+												ctry,			#destination country
+												currency,		#Document Currency
+												cat,			#Brand Category
+												region,			#Region
+												record			#Multipliers
+												)
+							conditionKey.append(get_price_content(tableNum, condType, varKey, sOrg, distCh, divOrg))
+							varKey = ""
 		# build pricing data
 		pricingData	 = price_cond(conditionKey)
 		# serialize the data
