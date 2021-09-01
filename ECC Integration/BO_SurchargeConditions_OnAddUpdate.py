@@ -94,6 +94,95 @@ def price_cond(conditionKey):
 	priceCond["ConditionKey"]	= conditionKey
 	return priceCond
 
+#get ECC fields for table
+def getErpTable(tableNum):
+	table = SqlHelper.GetList("""
+	SELECT *
+	FROM MG_TABLE_ECC
+	WHERE TABLE = '{table}'
+	""".format(table=tableNum))
+	return table
+
+#get ECC fields for table
+def getErpTable(tableNum):
+	table = SqlHelper.GetList("""
+	SELECT *
+	FROM MG_TABLE_ECC
+	WHERE TABLE = '{table}'
+	""".format(table=tableNum))
+	return table
+
+#build variable key
+def getVarKey(variableKey,
+				erpTable,
+				soldTos, 	#Sold-to party
+				shipTos,	#Ship-to party
+				sOrg,		#sales organisation
+				distCh, 	#Distribution Channel
+				matCode,	#Pricing Ref. Matl
+				endCust,	#End user
+				endObj		#end use object
+				):
+	#buid variable key
+	for line in erpTable:
+		if line.SAP_FIELD == "VKORG": #sales organisation
+			variableKey = variableKey + sOrg[:line.LENGTH-1]
+		elif line.SAP_FIELD == "VTWEG": #Distribution Channel
+			variableKey = variableKey + distCh[:line.LENGTH-1]
+		elif line.SAP_FIELD == "SPART": #Division
+			variableKey = variableKey + divOrg[:line.LENGTH-1]
+		elif line.SAP_FIELD == "KUNNR": #Sold-to party
+			variableKey = variableKey + soldTos
+		elif line.SAP_FIELD == "PMATN": #Pricing Ref. Matl
+			variableKey = variableKey + matCode[:line.LENGTH-1]
+		elif line.SAP_FIELD == "KUNWE": #Ship-to party
+			variableKey = variableKey + shipTos
+		elif line.SAP_FIELD == "ZZCUSZE": #End user
+			variableKey = variableKey + endCust
+		elif line.SAP_FIELD == "ZZVCENDUSEOBJCT": #end use object
+			variableKey = variableKey + endObj[:line.LENGTH-1]
+		elif line.SAP_FIELD == "AUART": #Order Type
+			variableKey = variableKey + ""
+		elif line.SAP_FIELD == "LAND1": #Destination Country
+			variableKey = variableKey + ""
+		elif line.SAP_FIELD == "WAERK": #Document Currency
+			variableKey = variableKey + ""
+		elif line.SAP_FIELD == "ZZBRAND_CATEGORY": #Brand Category
+			variableKey = variableKey + ""
+		elif line.SAP_FIELD == "ZZCONVERTER": #Converter
+			variableKey = variableKey + ""
+		elif line.SAP_FIELD == "ZZCRDIALVL": #Core Diameter Level
+			variableKey = variableKey + ""
+		elif line.SAP_FIELD == "ZZCUSZS": #Sales company
+			variableKey = variableKey + ""
+		elif line.SAP_FIELD == "ZZHIEZU01": #CustomerHierarchy01
+			variableKey = variableKey + ""
+		elif line.SAP_FIELD == "ZZLABEL_ENVIR": #Label environment
+			variableKey = variableKey + ""
+		elif line.SAP_FIELD == "ZZLEADLVL": #Lead Time Level
+			variableKey = variableKey + ""
+		elif line.SAP_FIELD == "ZZLOADLVL": #Load Level
+			variableKey = variableKey + ""
+		elif line.SAP_FIELD == "ZZPLHGTLVL": #Pallet Height Level
+			variableKey = variableKey + ""
+		elif line.SAP_FIELD == "ZZREGION": #Region
+			variableKey = variableKey + ""
+		elif line.SAP_FIELD == "ZZRLDIALVL": #Reel Diameter Level
+			variableKey = variableKey + ""
+		elif line.SAP_FIELD == "ZZRLWIDLVL": #Reel Width Level
+			variableKey = variableKey + ""
+		elif line.SAP_FIELD == "ZZSHLENLVL": #Sheet Length Level
+			variableKey = variableKey + ""
+		elif line.SAP_FIELD == "ZZSHWIDLVL": #Sheet Width Level
+			variableKey = variableKey + ""
+		elif line.SAP_FIELD == "ZZVCPACKMTYP": #packing main type
+			variableKey = variableKey + ""
+		elif line.SAP_FIELD == "ZZVCPALLET_TYPE": #Pallet Type
+			variableKey = variableKey + ""
+		elif line.SAP_FIELD == "ZZVCSHREAMWRAP": #sheet ream wrapping
+			variableKey = variableKey + ""
+	return variableKey
+
 
 # Harded coded for testing purposes, as the info is not on CPQ yet
 #/!\# to change - Start #/!\#
@@ -124,8 +213,9 @@ try:
 		soldTo 			= Product.Attributes.GetByName("MG_SOLD_TO").GetValue()
 		shipTo 			= Product.Attributes.GetByName("MG_SHIP_TO").GetValue()
 		endCust 		= Product.Attributes.GetByName("MG_END_CUSTOMER").GetValue()
+		endCustCde		= Product.Attributes.GetByName("MG_END_CUSTOMER").SelectedValue.ValueCode[4:] if Product.Attributes.GetByName("MG_END_CUSTOMER").SelectedValue else ""
 		endUseObject 	= Product.Attributes.GetByName("MG_END_USE_OBJECT").GetValue()
-
+		endObjCde		= Product.Attributes.GetByName("MG_END_USE_OBJECT").SelectedValue.ValueCode if Product.Attributes.GetByName("MG_END_USE_OBJECT").SelectedValue else ""
 		# check if attribute is empty, else assign 'X'
 		sold2  			= "" if (soldTo is None or soldTo == "") else "X"
 		shipTo2 		= "" if (shipTo is None or shipTo == "") else "X"
@@ -183,7 +273,8 @@ try:
 
 		# Define condition key list
 		conditionKey = list()
-
+		# initialize variable key
+		varKey = ""
 		# Build the Surcharge structure
 		for matCode in pricingMatCodeList:
 			# check if there are surcharges
@@ -199,22 +290,40 @@ try:
 						# get values // sql select -> to optimise
 						# if no corresponding condition is met in custom table, it will skip
 						condType, priority, tableNum = get_Surcharge_Conditions(sold2, shipTo2, endCust2, endUseObject2, s)
+#BUILDING VARIABLE KEY----------------------------------------------------------
+						#get fields to build the access sequence
+						erpTable = getErpTable(tableNum)
 
 						# check if Sold-To list is not empty
 						if allSoldToList:
 							for soldTos in allSoldToList:
-								# build variable key
-								variableKey = sOrg + distCh + divOrg + soldTos[4:-1] + matCode
-								# add the pricing content to 'condition key'
-								conditionKey.append(get_price_content(tableNum, condType, variableKey, sOrg, distCh, divOrg))
+								# check if Ship-To list is not empty
+								if allShipToList:
+									for shipTos in allShipToList:
+										varKey = getVarKey(varKey,
+															erpTable,
+															soldTos[4:], 	#Sold-to party
+															shipTos[4:],	#Ship-to party
+															sOrg,			#sales organisation
+															distCh, 		#Distribution Channel
+															matCode,		#Pricing Ref. Matl
+															endCustCde,		#End user
+															endObjCde		#end use object
+															)
+										conditionKey.append(get_price_content(tableNum, condType, varKey, sOrg, distCh, divOrg))
+								else:
+									varKey = getVarKey(varKey,
+														erpTable,
+														soldTos[4:], 	#Sold-to party
+														"",				#Ship-to party
+														sOrg,			#sales organisation
+														distCh, 		#Distribution Channel
+														matCode,		#Pricing Ref. Matl
+														endCust,		#End user
+														endObjCde		#end use object
+														)
+									conditionKey.append(get_price_content(tableNum, condType, varKey, sOrg, distCh, divOrg))
 
-						# check if Ship-To list is not empty
-						if allShipToList:
-							for shipTos in allShipToList:
-								# build variable key
-								variableKey = sOrg + distCh + divOrg + shipTos[4:-1] + matCode
-								# add the pricing content to 'condition key'
-								conditionKey.append(get_price_content(tableNum, condType, variableKey, sOrg, distCh, divOrg))
 					except Exception as eee:
 						Trace.Write("Error in BO_SurchargeConditions_OnAddUpdate --> " +str(eee))
 						Trace.Write("Surcharge code: " +str(s) + " error.")
