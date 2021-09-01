@@ -25,7 +25,7 @@ def get_ConditionScale():
 
 def get_ConditionItems(condType, uom, currency, rate):
 	conditionItems = dict()
-	conditionItems["ConditionType"] 		= str(condType)
+	conditionItems["ConditionType"] 		= condType[len(condType)-1]
 	conditionItems["ScaleType"] 			= ""
 	conditionItems["ScaleIndicator"] 		= ""
 	conditionItems["ScaleConditionUnit"] 	= ""
@@ -53,7 +53,7 @@ def get_price_content(tableNum, condType, variableKey, sOrg, distCh, divOrg):
 	price_content["ConditionTable"]  = str(tableNum)[1:]
 	price_content["Application"]	 = "V"
 	price_content["Usage"]		   = "A"
-	price_content["ConditionType"] 	 = str(condType)
+	price_content["ConditionType"] 	 = condType[len(condType)-1]
 	price_content["VariableKey"] 	 = str(variableKey)
 	price_content["SalesOrg"] 		 = str(sOrg)
 	price_content["DistChan"] 		 = str(distCh)
@@ -85,6 +85,24 @@ def price_cond(conditionKey):
 	priceCond["ConditionKey"]	= conditionKey
 	return priceCond
 
+#get ECC fields for table
+def getErpTable(tableNum):
+	table = SqlHelper.GetList("""
+	SELECT *
+	FROM MG_TABLE_ECC
+	WHERE TABLE_NAME = '{tableName}'
+	""".format(tableName=tableNum))
+	return table
+
+#get packing type
+def getPckType(field):
+	table = SqlHelper.GetList("""
+	SELECT *
+	FROM MG_MULTIPLIERS_ECC
+	WHERE SAP_FIELD = '{sapField}'
+	""".format(sapField=field))
+	return table
+
 #build variable key
 def getVarKey(variableKey,
 				erpTable,
@@ -94,7 +112,9 @@ def getVarKey(variableKey,
 				distCh, 	#Distribution Channel
 				matCode,	#Pricing Ref. Matl
 				endCust,	#End user
-				endObj		#end use object
+				endObj,		#end use object
+				pckType,	#packing type
+				ctry		#destination country
 				):
 	#buid variable key
 	for line in erpTable:
@@ -115,13 +135,13 @@ def getVarKey(variableKey,
 		elif line.SAP_FIELD == "ZZVCENDUSEOBJCT": #end use object
 			variableKey = variableKey + endObj.ljust(line.LENGTH)
 		elif line.SAP_FIELD == "LAND1": #Destination Country
-			variableKey = variableKey + " ".ljust(line.LENGTH)
+			variableKey = variableKey + ctry.ljust(line.LENGTH)
 		elif line.SAP_FIELD == "ZZCUSZS": #Sales company
-			variableKey = variableKey + " ".ljust(line.LENGTH)
+			variableKey = variableKey + soldTos.zfill(line.LENGTH)
 		elif line.SAP_FIELD == "ZZHIEZU01": #CustomerHierarchy01
 			variableKey = variableKey + "".zfill(line.LENGTH)
 		elif line.SAP_FIELD == "ZZVCPACKMTYP": #packing main type ['RP', 'PL']
-			variableKey = variableKey + " ".ljust(line.LENGTH)
+			variableKey = variableKey + pckType.ljust(line.LENGTH)
 	return variableKey
 
 # Harded coded for testing purposes, as the info is not on CPQ yet
@@ -215,6 +235,10 @@ try:
 		# Define condition key list
 		conditionKey = list()
 
+		#get packing type
+		pckTypes = getPckType("ZZVCPACKMTYP")
+		#get destination Country
+		ctry = Product.Attributes.GetByName('BO_COUNTRY_PROFITABILITY_CALC').SelectedValue.ValueCode if Product.Attributes.GetByName('BO_COUNTRY_PROFITABILITY_CALC').SelectedValue else " "
 		# Build the Pricing structure
 		for matCode in pricingMatCodeList:
 			# initialize variable key
@@ -234,61 +258,123 @@ try:
 						condPricUnit = 1
 
 					# get the price for material
-					rate = discountValue[ct]
-
+					rate = float(discountValue[ct]) * -1
 
 					if tableNum == "":
-						Trace.Write("sold2{} shipTo2{} endCust2{} endUseObject2{} s{}".format(sold2, shipTo2, endCust2, endUseObject2, s))
 						continue
 #BUILDING VARIABLE KEY----------------------------------------------------------
 					#get fields to build the access sequence
 					erpTable = getErpTable(tableNum)
 
-					# check if Sold-To list is not empty
-					if allSoldToList:
-						for soldTos in allSoldToList:
-							# check if Ship-To list is not empty
-							if allShipToList:
-								for shipTos in allShipToList:
-									varKey = getVarKey(varKey,
-														erpTable,
-														soldTos[4:-1], 	#Sold-to party
-														shipTos[4:-1],	#Ship-to party
-														sOrg,			#sales organisation
-														distCh, 		#Distribution Channel
-														matCode,		#Pricing Ref. Matl
-														endCustCde,		#End user
-														endObjCde		#end use object
-														)
-									conditionKey.append(get_price_content(tableNum, condType, varKey, sOrg, distCh, divOrg))
-									varKey = ""
+					#does table contains packing type
+					hasPckType = False
+					for record in erpTable:
+						if record.SAP_FIELD == "ZZVCPACKMTYP":
+							hasPckType = True
+
+					if hasPckType:
+						# check if Sold-To list is not empty
+						for record in pckTypes:
+							if allSoldToList:
+								for soldTos in allSoldToList:
+									# check if Ship-To list is not empty
+									if allShipToList:
+										for shipTos in allShipToList:
+											varKey = getVarKey(varKey,
+																erpTable,
+																soldTos[4:-1], 	#Sold-to party
+																shipTos[4:-1],	#Ship-to party
+																sOrg,			#sales organisation
+																distCh, 		#Distribution Channel
+																matCode,		#Pricing Ref. Matl
+																endCustCde,		#End user
+																endObjCde,		#end use object
+																record.VALUE,	#packing type
+																ctry			#destination country
+																)
+											conditionKey.append(get_price_content(tableNum, ct, varKey, sOrg, distCh, divOrg))
+											varKey = ""
+									else:
+										varKey = getVarKey(varKey,
+															erpTable,
+															soldTos[4:-1], 	#Sold-to party
+															"",				#Ship-to party
+															sOrg,			#sales organisation
+															distCh, 		#Distribution Channel
+															matCode,		#Pricing Ref. Matl
+															endCustCde,		#End user
+															endObjCde,		#end use object
+															record.VALUE,	#packing type
+															ctry			#destination country
+															)
+										conditionKey.append(get_price_content(tableNum, ct, varKey, sOrg, distCh, divOrg))
+										varKey = ""
 							else:
 								varKey = getVarKey(varKey,
 													erpTable,
-													soldTos[4:-1], 	#Sold-to party
+													"",				#Sold-to party
 													"",				#Ship-to party
 													sOrg,			#sales organisation
 													distCh, 		#Distribution Channel
 													matCode,		#Pricing Ref. Matl
 													endCustCde,		#End user
-													endObjCde		#end use object
+													endObjCde,		#end use object
+													record.VALUE,	#packing type
+													ctry			#destination country
 													)
-								conditionKey.append(get_price_content(tableNum, condType, varKey, sOrg, distCh, divOrg))
+								conditionKey.append(get_price_content(tableNum, ct, varKey, sOrg, distCh, divOrg))
 								varKey = ""
-					else:
-						varKey = getVarKey(varKey,
-											erpTable,
-											"",				#Sold-to party
-											"",				#Ship-to party
-											sOrg,			#sales organisation
-											distCh, 		#Distribution Channel
-											matCode,		#Pricing Ref. Matl
-											endCustCde,		#End user
-											endObjCde		#end use object
-											)
-						conditionKey.append(get_price_content(tableNum, condType, varKey, sOrg, distCh, divOrg))
-						varKey = ""
-
+					else:#no packing type
+						# check if Sold-To list is not empty
+						if allSoldToList:
+							for soldTos in allSoldToList:
+								# check if Ship-To list is not empty
+								if allShipToList:
+									for shipTos in allShipToList:
+										varKey = getVarKey(varKey,
+															erpTable,
+															soldTos[4:-1], 	#Sold-to party
+															shipTos[4:-1],	#Ship-to party
+															sOrg,			#sales organisation
+															distCh, 		#Distribution Channel
+															matCode,		#Pricing Ref. Matl
+															endCustCde,		#End user
+															endObjCde,		#end use object
+															" ",			#packing type
+															ctry			#destination country
+															)
+										conditionKey.append(get_price_content(tableNum, ct, varKey, sOrg, distCh, divOrg))
+										varKey = ""
+								else:
+									varKey = getVarKey(varKey,
+														erpTable,
+														soldTos[4:-1], 	#Sold-to party
+														"",				#Ship-to party
+														sOrg,			#sales organisation
+														distCh, 		#Distribution Channel
+														matCode,		#Pricing Ref. Matl
+														endCustCde,		#End user
+														endObjCde,		#end use object
+														" ",			#packing type
+														ctry			#destination country
+														)
+									conditionKey.append(get_price_content(tableNum, ct, varKey, sOrg, distCh, divOrg))
+									varKey = ""
+						else:
+							varKey = getVarKey(varKey,
+												erpTable,
+												"",				#Sold-to party
+												"",				#Ship-to party
+												sOrg,			#sales organisation
+												distCh, 		#Distribution Channel
+												matCode,		#Pricing Ref. Matl
+												endCustCde,		#End user
+												endObjCde,		#end use object
+												" ",			#packing type
+												ctry			#destination country
+												)
+							conditionKey.append(get_price_content(tableNum, ct, varKey, sOrg, distCh, divOrg))
+							varKey = ""
 
 		# build pricing data
 		pricingData	 = price_cond(conditionKey)
