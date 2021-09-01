@@ -108,11 +108,11 @@ def getMultipliers():
 	table = SqlHelper.GetList("""
 	SELECT *
 	FROM MG_MULTIPLIERS_ECC
-	""".format(sapField=field))
+	""")
 	return table
 
 #build variable key
-def getVarKey(variableKey,
+def getVarKey(
 				erpTable,
 				soldTos, 		#Sold-to party
 				shipTos,		#Ship-to party
@@ -128,6 +128,7 @@ def getVarKey(variableKey,
 				record			#Multipliers
 				):
 	#buid variable key
+	variableKey = ""
 	for line in erpTable:
 		if line.SAP_FIELD == "VKORG": #sales organisation
 			variableKey = variableKey + sOrg
@@ -153,12 +154,12 @@ def getVarKey(variableKey,
 			variableKey = variableKey + currency
 		elif line.SAP_FIELD == "ZZBRAND_CATEGORY": #Brand Category
 			variableKey = variableKey + cat.ljust(line.LENGTH)
-		elif record.SAP_FIELD == line.SAP_FIELD:
-			variableKey = variableKey + record.VALUE.ljust(line.LENGTH)
 		elif line.SAP_FIELD == "ZZCUSZS": #Sales company
 			variableKey = variableKey + soldTos.zfill(line.LENGTH)
 		elif line.SAP_FIELD == "ZZHIEZU01": #CustomerHierarchy01
 			variableKey = variableKey + " ".zfill(line.LENGTH)
+		elif record.SAP_FIELD.strip() == line.SAP_FIELD.strip():
+			variableKey = variableKey + record.VALUE.ljust(line.LENGTH)
 	return variableKey
 
 
@@ -282,6 +283,10 @@ try:
 #BUILDING VARIABLE KEY----------------------------------------------------------
 					#get fields to build the access sequence
 					erpTable = getErpTable(tableNum)
+					#get length of variable key
+					count = 0
+					for row in erpTable:
+						count += row.LENGTH
 					# check if Sold-To list is not empty
 					if allSoldToList:
 						for soldTos in allSoldToList:
@@ -289,7 +294,7 @@ try:
 							if allShipToList:
 								for shipTos in allShipToList:
 									for record in multipliers:
-										varKey = getVarKey(varKey,
+										varKey = getVarKey(
 															erpTable,
 															soldTos[4:-1], 	#Sold-to party
 															shipTos[4:-1],	#Ship-to party
@@ -304,11 +309,12 @@ try:
 															region,			#Region
 															record			#Multipliers
 															)
-										conditionKey.append(get_price_content(tableNum, condType, varKey, sOrg, distCh, divOrg))
-										varKey = ""
+										if count == len(varKey):
+											conditionKey.append(get_price_content(tableNum, condType, varKey, sOrg, distCh, divOrg))
+											varKey = ""
 							else:
 								for record in multipliers:
-									varKey = getVarKey(varKey,
+									varKey = getVarKey(
 														erpTable,
 														soldTos[4:-1], 	#Sold-to party
 														"",				#Ship-to party
@@ -323,11 +329,12 @@ try:
 														region,			#Region
 														record			#Multipliers
 														)
-									conditionKey.append(get_price_content(tableNum, condType, varKey, sOrg, distCh, divOrg))
-									varKey = ""
+									if count == len(varKey):
+										conditionKey.append(get_price_content(tableNum, condType, varKey, sOrg, distCh, divOrg))
+										varKey = ""
 					else:
 						for record in multipliers:
-							varKey = getVarKey(varKey,
+							varKey = getVarKey(
 												erpTable,
 												"",				#Sold-to party
 												"",				#Ship-to party
@@ -342,8 +349,9 @@ try:
 												region,			#Region
 												record			#Multipliers
 												)
-							conditionKey.append(get_price_content(tableNum, condType, varKey, sOrg, distCh, divOrg))
-							varKey = ""
+							if count == len(varKey):
+								conditionKey.append(get_price_content(tableNum, condType, varKey, sOrg, distCh, divOrg))
+								varKey = ""
 		# build pricing data
 		pricingData	 = price_cond(conditionKey)
 		# serialize the data
