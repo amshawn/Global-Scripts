@@ -25,8 +25,8 @@ if 1 == 1:
                 Quote.CustomFields.AssignValue('BO_CF_REBATE_RECIPIENT', row.Cells["REBATE_RECIPIENT"].Value)
 # set the values in the table for custom fields---------------------------------
             Quote.CustomFields.AssignValue('BO_CF_NAME_OUTPUT', row.Cells["NAME_ON_OUTPUT"].Value)
-            Quote.CustomFields.AssignValue('BO_CF_VALIDITY_START', row.Cells["VALID_FROM"].Value)
-            Quote.CustomFields.AssignValue('BO_CF_VALIDITY_END', row.Cells["VALID_UNTIL"].Value)
+            Quote.CustomFields.AssignValue('BO_CF_VALIDITY_START', UserPersonalizationHelper.ToUserFormat(row.Cells["VALID_FROM"].Value))
+            Quote.CustomFields.AssignValue('BO_CF_VALIDITY_END', UserPersonalizationHelper.ToUserFormat(row.Cells["VALID_UNTIL"].Value))
             Quote.CustomFields.AssignValue('BO_CF_PAY_CURRENCY', row.Cells["CURRENCY"].Value)
             Quote.CustomFields.AssignValue('BO_CF_REBATE_TYPE', row.Cells["REBATE_TYPE"].Value)
             Quote.CustomFields.AssignValue('BO_CF_REBATE_AMOUNT', row.Cells["REBATE_AMOUNT"].Value.ToString())
