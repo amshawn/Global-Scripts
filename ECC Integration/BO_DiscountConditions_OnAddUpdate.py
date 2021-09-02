@@ -25,7 +25,7 @@ def get_ConditionScale():
 
 def get_ConditionItems(condType, uom, currency, rate):
 	conditionItems = dict()
-	conditionItems["ConditionType"] 		= condType[:len(condType)-1]
+	conditionItems["ConditionType"] 		= condType
 	conditionItems["ScaleType"] 			= ""
 	conditionItems["ScaleIndicator"] 		= ""
 	conditionItems["ScaleConditionUnit"] 	= ""
@@ -53,7 +53,7 @@ def get_price_content(tableNum, condType, variableKey, sOrg, distCh, divOrg):
 	price_content["ConditionTable"]  = str(tableNum)[1:]
 	price_content["Application"]	 = "V"
 	price_content["Usage"]		   = "A"
-	price_content["ConditionType"] 	 = condType[len(condType)-1]
+	price_content["ConditionType"] 	 = condType
 	price_content["VariableKey"] 	 = str(variableKey)
 	price_content["SalesOrg"] 		 = str(sOrg)
 	price_content["DistChan"] 		 = str(distCh)
