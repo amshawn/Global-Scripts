@@ -2,7 +2,8 @@
 Update & Save button -> Periodic Rebates Quote Table
 '''
 import zlib
-from BO_Rebates_Module import clearCustomFields
+from Newtonsoft.Json import JsonConvert
+from BO_Rebates_Module import clearCustomFields, getJson
 #convert exclusions quote table to dictionary object
 def convExcl2Dict(table):
 	tableDict = dict()
@@ -41,6 +42,7 @@ def convSoldto2Dict(table):
 	for row in table.Rows:
 		tableDict[idx] = {}
 		tableDict[idx]["NAME"] 	    = row.Cells["NAME"].Value
+		tableDict[idx]["COUNTRY"]   = row.Cells["COUNTRY"].Value
 		tableDict[idx]["SAPID"]     = row.Cells["SAPID"].Value
 		tableDict[idx]["CUST_HIER"] = row.Cells["CUST_HIER"].Value
 		tableDict[idx]["REQUIRED"]  = row.Cells["REQUIRED"].Value
@@ -68,22 +70,30 @@ if 1 == 1:
 	agrType				= Quote.GetCustomField('MG_H_AGREEMENTTYPE').Content
 	#set rebate recipient
 	rebateRecpt 		= ""
+	#set rebate recipient code
 	recipientOptCode 	= "1"
+	#init rebate recipient name
+	rebateRecptName		= ""
 	if agrType == "End Customer":#rebate recipient = end customer
 		rebateRecpt		= Quote.GetCustomField('BO_CF_END_CUSTOMER').Content
+		Quote.GetCustomField('BO_CF_END_CUSTOMER').Editable = True
 	else:#rebate recipient  = sold-to
+		Quote.GetCustomField('BO_CF_REBATE_RECIPIENT').Editable = True
 		for attr in recipientOpt.AttributeValues:
 			if attr.DisplayValue == recipientOpt.Content:
 				if attr.ValueCode == "1": #rebate recipient = sold-to
 					recipientOptCode = attr.ValueCode
 					rebateRecpt	 = Quote.GetCustomField('BO_CF_REBATE_RECIPIENT').Content.split(",")[0]
-					rebateRecptName = Quote.GetCustomField('BO_CF_REBATE_RECIPIENT').Content.split(", ")[1] #BRC US1535 27/08/2021
+					rebateRecptName = Quote.GetCustomField('BO_CF_REBATE_RECIPIENT').Content.split(",")[1] #BRC US1535 27/08/2021
 				else:#rebate recipient = customer group
 					recipientOptCode = attr.ValueCode
 					for row in soldtoTable.Rows:
 						if row.Cells["CUST_HIER"].Value == "True":
 							rebateRecpt = row.Cells["NAME"].Value
 #get settlement period----------------------------------------------------------
+			#init settlement code
+			setlCode = ""
+			setlValue = ""
 			#get custom field
 			setlPeriod = Quote.GetCustomField('BO_CF_SETTLE_PERIOD')
 			for attr in setlPeriod.AttributeValues:
@@ -112,8 +122,6 @@ if 1 == 1:
 	exclCalDict = convExcl2Dict(exclCalcTable)
 	#compress dictionary
 	exclCalDict = compressString(str(exclCalDict))
-	#save table
-	periodicRebateTable.Save()
 # update periodic Rebate Table--------------------------------------------------
 	for row in periodicRebateTable.Rows:
 		# execute conditions only if a row is checked
@@ -121,8 +129,8 @@ if 1 == 1:
 # set the values in the table for custom fields---------------------------------
 			row.Cells['NAME_ON_OUTPUT'].Value	   			= Quote.GetCustomField('BO_CF_NAME_OUTPUT').Content
 			row.Cells['REBATE_RECIPIENT'].Value    			= rebateRecpt #either sold-to/selected hierarchy/endcustomer
-			row.Cells['VALID_FROM'].Value		  			= Quote.GetCustomField('BO_CF_VALIDITY_START').Content
-			row.Cells['VALID_UNTIL'].Value	       			= Quote.GetCustomField('BO_CF_VALIDITY_END').Content
+			row.Cells['VALID_FROM'].Value		  			= UserPersonalizationHelper.CovertToDate(Quote.GetCustomField('BO_CF_VALIDITY_START').Content)
+			row.Cells['VALID_UNTIL'].Value	       			= UserPersonalizationHelper.CovertToDate(Quote.GetCustomField('BO_CF_VALIDITY_END').Content)
 			row.Cells['CURRENCY'].Value		       			= Quote.GetCustomField('BO_CF_PAY_CURRENCY').Content
 			row.Cells['REBATE_AMOUNT'].Value	   			= Quote.GetCustomField('BO_CF_REBATE_AMOUNT').Content if Quote.GetCustomField('BO_CF_REBATE_AMOUNT').Content != "" else "0.00"
 			row.Cells['BO_CF_RCPT_OPT'].Value	   			= recipientOptCode
@@ -138,10 +146,26 @@ if 1 == 1:
 			row.Cells['BO_INCL_TBL_CALC'].Value    			= exclCalDict
 			row.Cells['BO_CF_SETTLE_PERIOD_VALUE'].Value    = setlValue   #BRC US 1535 26/08/2021
 			row.Cells['BO_CF_REBATE_RECIPIENT'].Value       = rebateRecptName   #BRC US 1535 27/08/2021
-			#set rebate type as readonly
-			Quote.GetCustomField('BO_CF_REBATE_TYPE').Editable      = True
+			row.Cells["IS_SELECTED"].Value                  = False
+			row.Cells["IS_UPDATED"].Value                   = True
+			row.Cells["SAP_SENDING"].Value                  = "Pending"
+#get XML------------------------------------------------------------------------
+			jsonCreate, jsonUpdate       = getJson(Quote, row.Cells["EXT_REF_NUM"].Value)
+			jsonUpdateEncoded            = str(JsonConvert.DeserializeXNode(jsonUpdate, "root")).encode('utf8')
+			row.Cells['XML_COND'].Value  = compressString(jsonUpdateEncoded)
+			row.Cells['JSON_COND'].Value = compressString(jsonUpdate.encode('utf8'))
+			break
+#save table
+	periodicRebateTable.Save()
+#set rebate type as readonly
+	Quote.GetCustomField('BO_CF_REBATE_TYPE').Editable = True
+	Quote.GetCustomField('BO_CF_PAY_CURRENCY').Editable = True
 #clear common fields------------------------------------------------------------
-			clearCustomFields(Quote)
+	clearCustomFields(Quote)
+	#reset rebate type
+	Quote.CustomFields.Disallow("BO_CF_REBATE_TYPE")
+	Quote.CustomFields.Allow("BO_CF_REBATE_TYPE")
+	Quote.CalculateAndSaveCustomFields()
 else:
 #except Exception as e:
 	pass
