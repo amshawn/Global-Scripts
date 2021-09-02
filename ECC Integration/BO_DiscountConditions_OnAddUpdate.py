@@ -32,12 +32,14 @@ def get_ConditionItems(condType, uom, currency, rate):
 	if condType[len(condType)-1] == "%":
 		conditionItems["CalculationType"] 	= "A"
 		conditionItems["ConditionUnit"] 	= ""
+		conditionItems["RateUnit"] 			= "P1"
+		conditionItems["ConditionPricingUnit"] 	= ""
 	else:
 		conditionItems["CalculationType"] 	= "C"
 		conditionItems["ConditionUnit"] 	= str(uom)
+		conditionItems["ConditionPricingUnit"] 	= 1
+		conditionItems["RateUnit"] 			= str(currency)
 	conditionItems["Rate"] 					= str(rate)
-	conditionItems["RateUnit"] 				= str(currency)
-	conditionItems["ConditionPricingUnit"] 	= condPricUnit
 	conditionItems["ConditionScale"] 		= get_ConditionScale()
 	return conditionItems
 
@@ -248,14 +250,6 @@ try:
 				for ct in discountCodeList:
 					# get values // sql select -> to optimise
 					condType, priority, tableNum = get_Discount_Conditions(sold2, shipTo2, endCust2, endUseObject2, ct)
-
-					# get the currency
-					if ct[-1:] == "%":
-						currency = "P1"
-						condPricUnit = ""
-					else:
-						currency = currency
-						condPricUnit = 1
 
 					# get the price for material
 					rate = float(discountValue[ct]) * -1
