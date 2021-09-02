@@ -186,8 +186,15 @@ if 1 == 1:
 
 #1516 Add rebate payload--------------------------------------------------------
 	for row in Quote.QuoteTables["BO_REBATES"].Rows:
-		addRow_PricingQuoteTable(row["NAME"], '', row["REBATE_TYPE"], status, row["JSON_CREATE"], revNum)
-		addRow_PricingQuoteTable(row["NAME"], '', row["REBATE_TYPE"], status, row["JSON_COND"], revNum)
+		#send only rebates which have not yet been sent to SAP
+		if row["SAP_SENDING"] != "Sent to PO":
+			#send only condition records for updated rebates
+			if row["IS_UPDATED"]:
+				addRow_PricingQuoteTable(row["NAME"], '', row["REBATE_TYPE"], status, row["JSON_COND"], revNum)
+			#send 2 messages for new rebates
+			else:
+				addRow_PricingQuoteTable(row["NAME"], '', row["REBATE_TYPE"], status, row["JSON_CREATE"], revNum)
+				addRow_PricingQuoteTable(row["NAME"], '', row["REBATE_TYPE"], status, row["JSON_COND"], revNum)
 
 	# save
 	pricQuoteTable.Save()
