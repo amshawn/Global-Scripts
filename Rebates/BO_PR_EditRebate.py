@@ -67,6 +67,7 @@ if 1 == 1:
                 # add row
                 newRow = soldtoTable.AddNewRow()
                 newRow["NAME"]      = dict[idx]["NAME"]
+                newRow["COUNTRY"]   = dict[idx]["COUNTRY"]
                 newRow["SAPID"]     = dict[idx]["SAPID"]
                 newRow["CUST_HIER"] = dict[idx]["CUST_HIER"]
                 newRow["REQUIRED"]  = dict[idx]["REQUIRED"]
