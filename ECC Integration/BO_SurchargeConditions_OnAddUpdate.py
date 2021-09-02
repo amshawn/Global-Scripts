@@ -16,38 +16,47 @@ Dev: 04/08/2021 - US 1513 - Rowyn
 
 """
 
-def get_ConditionScale(scaleMin):
+def get_ConditionScale(scale):
 	conditionScale = dict()
-	if scaleMin != "":
-		conditionScale["ConditionScaleQty"] = scaleMin
-		conditionScale["Rate"]				= rate
-	else:
-		conditionScale["ConditionScaleQty"] = ""
-		conditionScale["Rate"]				= ""
+	conditionScale["ConditionScaleQty"] = scale["ScaleQty"]
+	conditionScale["Rate"]				= scale["Rate"]
+	return conditionScale
+
+def get_emptyConditionScale():
+	conditionScale = dict()
+	conditionScale["ConditionScaleQty"] = ""
+	conditionScale["Rate"]				= ""
 	return conditionScale
 
 def get_ConditionItems(condType, uom, currency, rate):
 	conditionItems = dict()
 	conditionItems["ConditionType"] 		= str(condType)
-	conditionItems["ScaleType"] 			= ""
-	if scaleMin != "":
-		conditionItems["ScaleIndicator"] 	= "C"
-	else:
-		conditionItems["ScaleIndicator"] 	= ""
-	conditionItems["ScaleConditionUnit"] 	= str(uom)
 	conditionItems["CalculationType"] 		= "C"
-	conditionItems["Rate"] 					= str(rate)
+	conditionItems["Rate"] 					= rate
 	conditionItems["RateUnit"] 				= str(currency)
 	conditionItems["ConditionPricingUnit"] 	= "1"
 	conditionItems["ConditionUnit"] 		= str(uom)
-	conditionItems["ConditionScale"] 		= get_ConditionScale(scaleMin)
+
+	if len(surcharge["Scale"]) > 0:
+		conditionItems["ScaleType"] 		= "A"
+		conditionItems["ScaleIndicator"] 	= "C"
+		conditionItems["ScaleConditionUnit"]= str(uom)
+		condScale = list()
+		for row in surcharge["Scale"]:
+			condScale.append(get_ConditionScale(row))
+		conditionItems["ConditionScale"] 	= condScale
+	else:
+		conditionItems["ScaleType"] 		= ""
+		conditionItems["ScaleIndicator"] 	= ""
+		conditionItems["ScaleConditionUnit"]= ""
+		conditionItems["ConditionScale"] 	= get_emptyConditionScale()
 	return conditionItems
 
 def get_conditionHeader(startDate, endDate):
 	conditionHeader = dict()
 	conditionHeader["ValidFrom"] 		= str(startDate)
 	conditionHeader["ValidTo"] 			= str(endDate)
-	conditionHeader["ConditionItems"] 	= get_ConditionItems(condType, uom, currency, rate)
+	conditionHeader["ConditionItems"] 	= get_ConditionItems(condType, uom, currency, surcharge["Rate"])
 	return conditionHeader
 
 def get_price_content(tableNum, condType, variableKey, sOrg, distCh, divOrg):
@@ -236,25 +245,39 @@ try:
 
 		# define surcharge container
 		surchargeContainer		= Product.GetContainerByName('BO_SURCHARGE_CONT')
-		surchargePriceRate 		= dict()
-		surchargeList		   = list()
-
+		surchargePriceRate 		= list()
+		scaleList				= list()
+		surType					= ""
+		count					= 1
+		tableLength				= surchargeContainer.Rows.Count
 		# Loop in surcharge container to get values
 		for row in surchargeContainer.Rows:
-			for column in row.Columns:
-				if column.Name == "BO_SCALE_MIN":
-					# value  of Scale Min column
-					scale_min = column.Value
-				if column.Name == "BO_AMOUNT":
-					# value  of Amount column
-					rate = column.Value
-				if column.Name == "BO_CODE":
-					# value  of Code column
-					surchargeCode = column.Value
-					# Build Surcharge List
-					surchargeList.append(surchargeCode)
-					# Build surchargePriceRate dictionary of values {surchargeCode : [scale_min, rate]}
-					surchargePriceRate[surchargeCode] = get_PriceRateList(scale_min, rate)
+# Build surchargePriceRate dictionary of values {surchargeCode : [scale_min, rate]}
+			if row["BO_SCALE_MIN"] != "":
+				scale = dict()
+				scale["ScaleQty"] 	= row["BO_SCALE_MIN"]
+				scale["Rate"]		= row["BO_AMOUNT"]
+				scaleList.append(scale)
+
+			if count == tableLength: #last row
+				isLastRow = True
+			elif row["BO_CODE"] != surchargeContainer.Rows[count]["BO_CODE"]: #new surcharge
+				isLastRow = True
+			else:
+				isLastRow = False
+
+			if isLastRow:
+				surcharge = dict()
+				surcharge["SurchargeCode"] = row["BO_CODE"]
+				if len(scale) > 0:
+					surcharge["Scale"] = scaleList
+				else:
+					surcharge["Scale"] = ""
+
+				surcharge["Rate"] = row["BO_AMOUNT"]
+				surchargePriceRate.append(surcharge)
+				scaleList = list()
+			count += 1
 
 		#get multipliers
 		multipliers = getMultipliers()
@@ -266,19 +289,14 @@ try:
 			# initialize variable key
 			varKey = ""
 			# check if there are surcharges
-			if surchargeList:
-				for s in surchargeList:
+			if surchargePriceRate:
+				for surcharge in surchargePriceRate:
 
-					# get the amount for each surcharge
-					scaleMin	= surchargePriceRate[s][0]
-					# get the amount for each surcharge
-					rate		= surchargePriceRate[s][1]
 					# get values // sql select -> to optimise
 					# if no corresponding condition is met in custom table, it will skip
-					condType, priority, tableNum = get_Surcharge_Conditions(sold2, shipTo2, endCust2, endUseObject2, s)
+					condType, priority, tableNum = get_Surcharge_Conditions(sold2, shipTo2, endCust2, endUseObject2, surcharge["SurchargeCode"])
 
 					if tableNum == "":
-						Trace.Write("sold2{} shipTo2{} endCust2{} endUseObject2{} s{}".format(sold2, shipTo2, endCust2, endUseObject2, s))
 						continue
 #BUILDING VARIABLE KEY----------------------------------------------------------
 					#get fields to build the access sequence
@@ -287,6 +305,7 @@ try:
 					count = 0
 					for row in erpTable:
 						count += row.LENGTH
+
 					# check if Sold-To list is not empty
 					if allSoldToList:
 						for soldTos in allSoldToList:
