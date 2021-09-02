@@ -195,11 +195,19 @@ if 1 == 1:
 			newRow['BO_INCL_TBL_CALC']    = compDict
 
 			periodicRebateTable.Save()
-#2215 Filter on rebate type-----------------------------------------------------
-			mylist = []
+			#Initiate rebate types list
+			mylist = list()
+			#get rebate type already used
 			for row in periodicRebateTable.Rows:
-				mylist.append("TYPE != '{0}'".format(row.Cells["REBATE_TYPE"].Value))
-			Quote.CustomFields.AssignValue("BO_CF_REBATE_FILTER", " and ".join(mylist))
+				if not row["REBATE_TYPE"]:
+					mylist.append(row["REBATE_TYPE"])
+
+			if len(mylist) > 0:
+				#Get all active rebate types that havent been selected yet
+				Result = "ACTIVE ='X' AND TYPE NOT IN({list})".format(list= str(mylist)[1:-1])
+			else: #Get all active rebate types
+				 = "ACTIVE ='X'"
+			Quote.CustomFields.AssignValue("BO_CF_REBATE_FILTER", Result)
 #clear common fields------------------------------------------------------------
 			clearCustomFields(Quote)
 			#reset rebate type
