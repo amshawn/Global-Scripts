@@ -25,7 +25,7 @@ def get_ConditionScale():
 
 def get_ConditionItems(condType, uom, currency, rate):
 	conditionItems = dict()
-	conditionItems["ConditionType"] 		= condType[len(condType)-1]
+	conditionItems["ConditionType"] 		= condType[:len(condType)-1]
 	conditionItems["ScaleType"] 			= ""
 	conditionItems["ScaleIndicator"] 		= ""
 	conditionItems["ScaleConditionUnit"] 	= ""
