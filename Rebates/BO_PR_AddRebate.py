@@ -52,6 +52,7 @@ def convSoldto2Dict(table):
 	for row in table.Rows:
 		tableDict[idx] = {}
 		tableDict[idx]["NAME"] 	    = row.Cells["NAME"].Value
+		tableDict[idx]["COUNTRY"]   = row.Cells["COUNTRY"].Value
 		tableDict[idx]["SAPID"]     = row.Cells["SAPID"].Value
 		tableDict[idx]["CUST_HIER"] = row.Cells["CUST_HIER"].Value
 		tableDict[idx]["REQUIRED"]  = row.Cells["REQUIRED"].Value
@@ -98,7 +99,7 @@ if 1 == 1:
 						recipientOptCode = attr.ValueCode
 						if attr.ValueCode == "1": #rebate recipient = sold-to
 							rebateRecpt	= Quote.GetCustomField('BO_CF_REBATE_RECIPIENT').Content.split(",")[0]
-							rebateRecptName = Quote.GetCustomField('BO_CF_REBATE_RECIPIENT').Content.split(", ")[1] #BRC US1535 27/08/2021
+							rebateRecptName = Quote.GetCustomField('BO_CF_REBATE_RECIPIENT').Content.split(",")[1] #BRC US1535 27/08/2021
 						else:#rebate recipient = customer group
 							for row in soldtoTable.Rows:
 								if row.Cells["CUST_HIER"].Value == "True":
@@ -206,7 +207,7 @@ if 1 == 1:
 				#Get all active rebate types that havent been selected yet
 				Result = "ACTIVE ='X' AND TYPE NOT IN({list})".format(list= str(mylist)[1:-1])
 			else: #Get all active rebate types
-				 = "ACTIVE ='X'"
+				Result = "ACTIVE ='X'"
 			Quote.CustomFields.AssignValue("BO_CF_REBATE_FILTER", Result)
 #clear common fields------------------------------------------------------------
 			clearCustomFields(Quote)
