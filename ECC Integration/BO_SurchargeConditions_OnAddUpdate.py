@@ -270,6 +270,8 @@ try:
 				surcharge = dict()
 				surcharge["SurchargeCode"] = row["BO_CODE"]
 				if len(scale) > 0:
+					scaleList = sorted(scaleList, reverse=True)
+					scaleList = sorted(scaleList.items(), key=lambda x: x[1])
 					surcharge["Scale"] = scaleList
 				else:
 					surcharge["Scale"] = ""
@@ -278,6 +280,8 @@ try:
 				surchargePriceRate.append(surcharge)
 				scaleList = list()
 			count += 1
+
+
 
 		#get multipliers
 		multipliers = getMultipliers()
