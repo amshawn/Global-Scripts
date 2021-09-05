@@ -252,36 +252,40 @@ try:
 		tableLength				= surchargeContainer.Rows.Count
 		# Loop in surcharge container to get values
 		for row in surchargeContainer.Rows:
+			if row["IS_UPDATED"] == "True":
 # Build surchargePriceRate dictionary of values {surchargeCode : [scale_min, rate]}
-			if row["BO_SCALE_MIN"] != "":
 				scale = dict()
-				scale["ScaleQty"] 	= row["BO_SCALE_MIN"]
-				scale["Rate"]		= row["BO_AMOUNT"]
-				scaleList.append(scale)
+				if row["BO_SCALE_MIN"] != "":
+					scale["ScaleQty"] 	= float(row["BO_SCALE_MIN"])
+					scaleMax = round(float(row["BO_SCALE_MAX"]))
+					scale["Rate"]		= float(row["BO_AMOUNT"])
+					scaleList.append(scale)
 
-			if count == tableLength: #last row
-				isLastRow = True
-			elif row["BO_CODE"] != surchargeContainer.Rows[count]["BO_CODE"]: #new surcharge
-				isLastRow = True
-			else:
-				isLastRow = False
-
-			if isLastRow:
-				surcharge = dict()
-				surcharge["SurchargeCode"] = row["BO_CODE"]
-				if len(scale) > 0:
-					scaleList = sorted(scaleList, reverse=True)
-					scaleList = sorted(scaleList.items(), key=lambda x: x[1])
-					surcharge["Scale"] = scaleList
+				if count == tableLength: #last row
+					isLastRow = True
+				elif row["BO_CODE"] != surchargeContainer.Rows[count]["BO_CODE"]: #new surcharge
+					isLastRow = True
 				else:
-					surcharge["Scale"] = ""
+					isLastRow = False
 
-				surcharge["Rate"] = row["BO_AMOUNT"]
-				surchargePriceRate.append(surcharge)
-				scaleList = list()
+				if isLastRow:
+					surcharge = dict()
+					surcharge["SurchargeCode"] = row["BO_CODE"]
+					if len(scale) > 0:
+						#add last line for 0
+						scale = dict()
+						scale["ScaleQty"] 	= scaleMax
+						scale["Rate"]		= 0.00
+						scaleList.append(scale)
+						scaleList = sorted(scaleList, reverse=True)
+						surcharge["Scale"] = scaleList
+					else:
+						surcharge["Scale"] = ""
+
+					surcharge["Rate"] = row["BO_AMOUNT"]
+					surchargePriceRate.append(surcharge)
+					scaleList = list()
 			count += 1
-
-
 
 		#get multipliers
 		multipliers = getMultipliers()
