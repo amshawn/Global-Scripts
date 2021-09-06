@@ -80,15 +80,15 @@ if 1 == 1:
 				#get json object compressed
 				priceJson 			=  product.Attributes.GetByName("BO_PRICE_ECC").GetValue()
 				#set json object compressed
-				Product.Attr("BO_PRICE_ECC_OLD").AssignValue(priceJson)
+				product.Attr("BO_PRICE_ECC_OLD").AssignValue(priceJson)
 				#get json object compressed
 				surchargeJson 		=  product.Attributes.GetByName("BO_SURCHARGE_ECC").GetValue()
 				#set json object compressed
-				Product.Attr("BO_SURCHARGE_ECC_OLD").AssignValue(surchargeJson)
+				product.Attr("BO_SURCHARGE_ECC_OLD").AssignValue(surchargeJson)
 				#get json object compressed
 				discountJson 		=  product.Attributes.GetByName("BO_DISCOUNT_ECC").GetValue()
 				#set json object compressed
-				Product.Attr("BO_DISCOUNT_ECC_OLD").AssignValue(discountJson)
+				product.Attr("BO_DISCOUNT_ECC_OLD").AssignValue(discountJson)
 #JSON---------------------------------------------------------------------------
 				pricingMatCodeList 	= list()
 				pricingMatPrice	 	= dict()
@@ -136,30 +136,37 @@ if 1 == 1:
 				todayDate	= Quote.DateCreated.Now
 				#read json
 				for conditionKey in jsonObj.ConditionKey:
-					#get validity date from JSON
-					validTo 		= conditionKey.ConditionHeader.ValidTo.ToString()
-					validFrom 		= conditionKey.ConditionHeader.ValidFrom.ToString()
-					#convert validity date from string to date
-					validToDate		= DateTime(int(validTo[:4]), int(validTo[4:6]), int(validTo[6:8]))
-					validFromDate	= DateTime(int(validFrom[:4]), int(validFrom[4:6]), int(validFrom[6:8]))
-					#validity dates are within current period
-					if  Quote.DateCreated.Now >= validFromDate and Quote.DateCreated.Now < validToDate:
-						#update validity end date to today date
-						conditionKey.ConditionHeader.ValidTo = Quote.DateCreated.Now.ToString('yyyyMMdd')
-					else: #validity dates are not within current period
-						#update validity end date to validity start date
-						conditionKey.ConditionHeader.ValidTo = conditionKey.ConditionHeader.ValidFrom
-					#does pricing combination exists in the appendix #2 of both agreement?
-					for apdx in appendixList:
-						if conditionKey.VariableKey.ToString() in apdx["VAR_KEY"]: #yes?
-							date 	= datetime.strptime(apdx["VALID_FROM"], '%m/%d/%Y')
-							newDate = DateTime(date.year, date.month, date.day).AddDays(-1)
-							#is new date starting before valid from date
-							if newDate >= validFromDate:
-								conditionKey.ConditionHeader.ValidTo = newDate.ToString('yyyyMMdd')
-							else:
-								conditionKey.ConditionHeader.ValidTo =conditionKey.ConditionHeader.ValidFrom
-							break
+					if row['CONDITION'][0] != "Surcharge":
+						#get validity date from JSON
+						validTo 		= conditionKey.ConditionHeader.ValidTo.ToString()
+						validFrom 		= conditionKey.ConditionHeader.ValidFrom.ToString()
+						#convert validity date from string to date
+						validToDate		= DateTime(int(validTo[:4]), int(validTo[4:6]), int(validTo[6:8]))
+						validFromDate	= DateTime(int(validFrom[:4]), int(validFrom[4:6]), int(validFrom[6:8]))
+						#validity dates are within current period
+						if  Quote.DateCreated.Now >= validFromDate and Quote.DateCreated.Now < validToDate:
+							#update validity end date to today date
+							conditionKey.ConditionHeader.ValidTo = Quote.DateCreated.Now.ToString('yyyyMMdd')
+						else: #validity dates are not within current period
+							#update validity end date to validity start date
+							conditionKey.ConditionHeader.ValidTo = conditionKey.ConditionHeader.ValidFrom
+						#does pricing combination exists in the appendix #2 of both agreement?
+						for apdx in appendixList:
+							if conditionKey.VariableKey.ToString() in apdx["VAR_KEY"]: #yes?
+								date 	= datetime.strptime(apdx["VALID_FROM"], '%m/%d/%Y')
+								newDate = DateTime(date.year, date.month, date.day).AddDays(-1)
+								#is new date starting before valid from date
+								if newDate >= validFromDate:
+									conditionKey.ConditionHeader.ValidTo = newDate.ToString('yyyyMMdd')
+								else:
+									conditionKey.ConditionHeader.ValidTo =conditionKey.ConditionHeader.ValidFrom
+								break
+					else:
+						conditionKey.ConditionHeader.ConditionItems.Rate = 0
+						for scale in conditionKey.ConditionHeader.ConditionItems.ConditionScale:
+							scale.Rate = 0
+							scale.ConditionScaleQty = 0
+
 				#add new rows
 				addRow_PricingQuoteTable(row['PRODUCT'], row['GUID'], row['CONDITION'], status, zlib.compress(RestClient.SerializeToJson(jsonObj)), row['REV_NUM'])
 #-------------------------------------------------------------------------------
