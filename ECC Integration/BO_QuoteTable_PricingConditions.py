@@ -76,6 +76,20 @@ if 1 == 1:
 				allShipToList 		= allShipTo[1:-1].split(", ") if allShipTo != "['']" else list()
 				# define Pricing container
 				pricingContainer	= product.GetContainerByName('BO_PRICING_CONT')
+#JSON---------------------------------------------------------------------------
+				#get json object compressed
+				priceJson 			=  product.Attributes.GetByName("BO_PRICE_ECC").GetValue()
+				#set json object compressed
+				Product.Attr("BO_PRICE_ECC_OLD").AssignValue(priceJson)
+				#get json object compressed
+				surchargeJson 		=  product.Attributes.GetByName("BO_SURCHARGE_ECC").GetValue()
+				#set json object compressed
+				Product.Attr("BO_SURCHARGE_ECC_OLD").AssignValue(surchargeJson)
+				#get json object compressed
+				discountJson 		=  product.Attributes.GetByName("BO_DISCOUNT_ECC").GetValue()
+				#set json object compressed
+				Product.Attr("BO_DISCOUNT_ECC_OLD").AssignValue(discountJson)
+#JSON---------------------------------------------------------------------------
 				pricingMatCodeList 	= list()
 				pricingMatPrice	 	= dict()
 # Loop in pricing container to get values---------------------------------------
