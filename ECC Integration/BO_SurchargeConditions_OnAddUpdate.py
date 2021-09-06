@@ -279,10 +279,11 @@ try:
 						scaleList.append(scale)
 						scaleList = sorted(scaleList, reverse=True)
 						surcharge["Scale"] = scaleList
+						surcharge["Rate"] = scaleList[0]["Rate"]
 					else:
 						surcharge["Scale"] = ""
+						surcharge["Rate"] = row["BO_AMOUNT"]
 
-					surcharge["Rate"] = row["BO_AMOUNT"]
 					surchargePriceRate.append(surcharge)
 					scaleList = list()
 			count += 1
