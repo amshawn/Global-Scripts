@@ -74,9 +74,9 @@ def get_Discount_Conditions(sold2, shipTo2, endCust2, endUseObject2, condTypeFul
 										AND	COND_TYPE_FULL = '{}'""".format(sold2, shipTo2, endCust2, endUseObject2, condTypeFull))
 
 	# Store condition type, priority, table number in variables
-	condType	= sqlResult.COND_TYPE
-	priority	= sqlResult.ACCESS
-	tableNum	= sqlResult.TABLE_NUM
+	condType	= sqlResult.COND_TYPE if sqlResult else ""
+	priority	= sqlResult.ACCESS if sqlResult else ""
+	tableNum	= sqlResult.TABLE_NUM if sqlResult else ""
 
 	return condType, priority, tableNum
 
