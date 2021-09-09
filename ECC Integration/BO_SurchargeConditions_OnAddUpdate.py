@@ -73,15 +73,16 @@ def get_price_content(tableNum, condType, variableKey, sOrg, distCh, divOrg):
 	return price_content
 
 # get access sequence from BO_SURCHARGE_CONDITIONS, based on configuration
-def get_Surcharge_Conditions(sold2, shipTo2, endCust2, endUseObject2, condType):
+def get_Surcharge_Conditions(flags, condType):
 	sqlResult   = SqlHelper.GetFirst("""SELECT COND_TYPE, ACCESS, TABLE_NUM
 									FROM BO_SURCHARGE_CONDITIONS WHERE
 									SOLD_TO = '%s' AND
 									SHIP_TO = '%s' AND
 									END_USER = '%s' AND
 									END_USE_OBJECT = '%s' AND
+									IS_MAT = '%s' AND
 									COND_TYPE = '%s'
-									ORDER BY ACCESS ASC """ %(sold2, shipTo2, endCust2, endUseObject2, condType))
+									ORDER BY ACCESS ASC """ %(flags["SOLDTO"], flags["SHIPTO"], flags["ENDUSER"], flags["ENDOBJ"], flags["MAT"], condType))
 
 	# Store condition type, priority, table number in variables
 	condType	= sqlResult.COND_TYPE if sqlResult else ""
@@ -180,182 +181,156 @@ divOrg		= "PG"
 #/!\# to change - END   #/!\#
 
 
-try:
-	from Newtonsoft.Json import JsonConvert
-	from Newtonsoft.Json.Linq import JObject
-	from datetime import datetime
+from Newtonsoft.Json import JsonConvert
+from Newtonsoft.Json.Linq import JObject
+from datetime import datetime
 
-	# check if surcharges have been changed
-	if Product.Attributes.GetByName("BO_HIDDEN_ATTRIBUTE_SURCHARGE").GetValue() == "TRUE":
+# check if surcharges have been changed
+if Product.Attributes.GetByName("BO_HIDDEN_ATTRIBUTE_SURCHARGE").GetValue() == "TRUE":
 
-		# Define attributes to retrieve value from configuration
-		# store value in variables
-		mgType			= Product.Attributes.GetByName("MG_TYPE").GetValue()
+	# Define attributes to retrieve value from configuration
+	# store value in variables
+	mgType			= Product.Attributes.GetByName("MG_TYPE").GetValue()
 
-		startDate	   = datetime.strptime(Product.Attr('MG_VALIDITY_START_DATE').GetValue(), '%m/%d/%Y').ToString().split(' ')[0].replace('-', '')
-		endDate		 = datetime.strptime(Product.Attr('MG_VALIDITY_END_DATE').GetValue(), '%m/%d/%Y').ToString().split(' ')[0].replace('-', '')
+	startDate	   = datetime.strptime(Product.Attr('MG_VALIDITY_START_DATE').GetValue(), '%m/%d/%Y').ToString().split(' ')[0].replace('-', '')
+	endDate		 = datetime.strptime(Product.Attr('MG_VALIDITY_END_DATE').GetValue(), '%m/%d/%Y').ToString().split(' ')[0].replace('-', '')
 
-		currency		= Product.Attributes.GetByName("MG_CURRENCY_AUTO").GetValue()
-		uom			 = Product.Attributes.GetByName('MG_UOM').SelectedValue.ValueCode
+	currency		= Product.Attributes.GetByName("MG_CURRENCY_AUTO").GetValue()
+	uom			 = Product.Attributes.GetByName('MG_UOM').SelectedValue.ValueCode
 
-		soldTo 			= Product.Attributes.GetByName("MG_SOLD_TO").GetValue()
-		shipTo 			= Product.Attributes.GetByName("MG_SHIP_TO").GetValue()
-		endCust 		= Product.Attributes.GetByName("MG_END_CUSTOMER").GetValue()
-		endCustCde		= Product.Attributes.GetByName("MG_END_CUSTOMER").SelectedValue.ValueCode[4:] if Product.Attributes.GetByName("MG_END_CUSTOMER").SelectedValue else ""
-		endUseObject 	= Product.Attributes.GetByName("MG_END_USE_OBJECT").GetValue()
-		endObjCde		= Product.Attributes.GetByName("MG_END_USE_OBJECT").SelectedValue.ValueCode if Product.Attributes.GetByName("MG_END_USE_OBJECT").SelectedValue else ""
-		#get destination Country
-		ctry 			= Product.Attributes.GetByName('BO_COUNTRY_PROFITABILITY_CALC').SelectedValue.ValueCode if Product.Attributes.GetByName('BO_COUNTRY_PROFITABILITY_CALC').SelectedValue else " "
-		#get Region
-		region 			= Quote.SelectedMarket.MarketCode.split("_")[0]
-		#get Category
-		cat				= Product.PartNumber
-		# check if attribute is empty, else assign 'X'
-		sold2  			= "" if (soldTo is None or soldTo == "") else "X"
-		shipTo2 		= "" if (shipTo is None or shipTo == "") else "X"
-		endCust2 		= "" if (endCust is None or endCust == "") else "X"
-		endUseObject2 	= "" if (endUseObject is None or endUseObject == "") else "X"
+	soldTo 			= Product.Attributes.GetByName("MG_SOLD_TO").GetValue()
+	shipTo 			= Product.Attributes.GetByName("MG_SHIP_TO").GetValue()
+	endCust 		= Product.Attributes.GetByName("MG_END_CUSTOMER").GetValue()
+	endCustCde		= Product.Attributes.GetByName("MG_END_CUSTOMER").SelectedValue.ValueCode[4:] if Product.Attributes.GetByName("MG_END_CUSTOMER").SelectedValue else ""
+	endUseObject 	= Product.Attributes.GetByName("MG_END_USE_OBJECT").GetValue()
+	endObjCde		= Product.Attributes.GetByName("MG_END_USE_OBJECT").SelectedValue.ValueCode if Product.Attributes.GetByName("MG_END_USE_OBJECT").SelectedValue else ""
+	#get destination Country
+	ctry 			= Product.Attributes.GetByName('BO_COUNTRY_PROFITABILITY_CALC').SelectedValue.ValueCode if Product.Attributes.GetByName('BO_COUNTRY_PROFITABILITY_CALC').SelectedValue else " "
+	#get Region
+	region 			= Quote.SelectedMarket.MarketCode.split("_")[0]
+	#get Category
+	cat				= Product.PartNumber
+	flags = dict()
+	# check if attribute is empty, else assign 'X'
+	flags["SOLDTO"]  			= "" if (soldTo is None or soldTo == "") else "X"#sold2
+	flags["SHIPTO"] 			= "" if (shipTo is None or shipTo == "") else "X"#shipTo2
+	flags["ENDUSER"] 			= "" if (endCust is None or endCust == "") else "X"#endCust2
+	flags["ENDOBJ"] 			= "" if (endUseObject is None or endUseObject == "") else "X"#endUseObject2
 
-		# Read the value of hidden attribute "Sold-To"
-		allSoldTo 			= Product.Attributes.GetByName("MG_SOLD_TO_VALUECODES").GetValue()
-		# Break down the string of value into a list
-		allSoldToList	   = allSoldTo[1:-1].split(", ") if allSoldTo != "['']" else list()
+	# Read the value of hidden attribute "Sold-To"
+	allSoldTo 			= Product.Attributes.GetByName("MG_SOLD_TO_VALUECODES").GetValue()
+	# Break down the string of value into a list
+	allSoldToList	   = allSoldTo[1:-1].split(", ") if allSoldTo != "['']" else list()
 
-		# Read the value of hidden attribute "Ship-To"
-		allShipTo 			= Product.Attributes.GetByName("MG_SHIP_TO_VALUECODES").GetValue()
-		# Break down the string of value into a list
-		allShipToList 		= allShipTo[1:-1].split(", ") if allShipTo != "['']" else list()
+	# Read the value of hidden attribute "Ship-To"
+	allShipTo 			= Product.Attributes.GetByName("MG_SHIP_TO_VALUECODES").GetValue()
+	# Break down the string of value into a list
+	allShipToList 		= allShipTo[1:-1].split(", ") if allShipTo != "['']" else list()
 
-		# define Pricing container
-		pricingContainer	= Product.GetContainerByName('BO_PRICING_CONT')
-		pricingMatCodeList 	= list()
-		pricingMatPrice	 = dict()
+	# define Pricing container
+	pricingContainer	= Product.GetContainerByName('BO_PRICING_CONT')
+	pricingMatCodeList 	= list()
+	pricingMatPrice	 = dict()
 
-		# Loop in pricing container to get values
-		for row in pricingContainer.Rows:
-			for column in row.Columns:
-				if column.Name == "INVOICED_PRICE":
-					# value  of Invoice Price column
-					invPrice = column.Value
-				if column.Name == "MATERIAL_CODE":
-					# add each 'Material Code' in a list
-					pricingMatCodeList.append(column.Value)
-					# build a dictionary of 'Material Code' : 'Invoice Price'
-					pricingMatPrice[column.Value] = invPrice
+	# Loop in pricing container to get values
+	for row in pricingContainer.Rows:
+		for column in row.Columns:
+			if column.Name == "INVOICED_PRICE":
+				# value  of Invoice Price column
+				invPrice = column.Value
+			if column.Name == "MATERIAL_CODE":
+				# add each 'Material Code' in a list
+				pricingMatCodeList.append(column.Value)
+				# build a dictionary of 'Material Code' : 'Invoice Price'
+				pricingMatPrice[column.Value] = invPrice
 
-		# define surcharge container
-		surchargeContainer		= Product.GetContainerByName('BO_SURCHARGE_CONT')
-		surchargePriceRate 		= list()
-		scaleList				= list()
-		surType					= ""
-		count					= 1
-		tableLength				= surchargeContainer.Rows.Count
-		# Loop in surcharge container to get values
-		for row in surchargeContainer.Rows:
-			if row["IS_UPDATED"] == "True":
+	#is there any material? Yes! Set flag to X
+	flags["MAT"] 	= "X" if pricingMatCodeList else ""
+	# define surcharge container
+	surchargeContainer		= Product.GetContainerByName('BO_SURCHARGE_CONT')
+	surchargePriceRate 		= list()
+	scaleList				= list()
+	surType					= ""
+	count					= 1
+	tableLength				= surchargeContainer.Rows.Count
+	# Loop in surcharge container to get values
+	for row in surchargeContainer.Rows:
+		if row["IS_UPDATED"] == "True":
 # Build surchargePriceRate dictionary of values {surchargeCode : [scale_min, rate]}
-				scale = dict()
-				if row["BO_SCALE_MIN"] != "":
-					scale["ScaleQty"] 	= float(row["BO_SCALE_MIN"])
-					scaleMax = round(float(row["BO_SCALE_MAX"]))
-					scale["Rate"]		= float(row["BO_AMOUNT"])
+			scale = dict()
+			if row["BO_SCALE_MIN"] != "":
+				scale["ScaleQty"] 	= float(row["BO_SCALE_MIN"])
+				scaleMax = round(float(row["BO_SCALE_MAX"]))
+				scale["Rate"]		= float(row["BO_AMOUNT"])
+				scaleList.append(scale)
+
+			if count == tableLength: #last row
+				isLastRow = True
+			elif row["BO_CODE"] != surchargeContainer.Rows[count]["BO_CODE"]: #new surcharge
+				isLastRow = True
+			else:
+				isLastRow = False
+
+			if isLastRow:
+				surcharge = dict()
+				surcharge["SurchargeCode"] = row["BO_CODE"]
+				if len(scale) > 0:
+					#add last line for 0
+					scale = dict()
+					scale["ScaleQty"] 	= scaleMax
+					scale["Rate"]		= 0.00
 					scaleList.append(scale)
-
-				if count == tableLength: #last row
-					isLastRow = True
-				elif row["BO_CODE"] != surchargeContainer.Rows[count]["BO_CODE"]: #new surcharge
-					isLastRow = True
+					scaleList = sorted(scaleList, reverse=True)
+					surcharge["Scale"] = scaleList
+					surcharge["Rate"] = scaleList[0]["Rate"]
 				else:
-					isLastRow = False
+					surcharge["Scale"] = ""
+					surcharge["Rate"] = row["BO_AMOUNT"]
 
-				if isLastRow:
-					surcharge = dict()
-					surcharge["SurchargeCode"] = row["BO_CODE"]
-					if len(scale) > 0:
-						#add last line for 0
-						scale = dict()
-						scale["ScaleQty"] 	= scaleMax
-						scale["Rate"]		= 0.00
-						scaleList.append(scale)
-						scaleList = sorted(scaleList, reverse=True)
-						surcharge["Scale"] = scaleList
-						surcharge["Rate"] = scaleList[0]["Rate"]
-					else:
-						surcharge["Scale"] = ""
-						surcharge["Rate"] = row["BO_AMOUNT"]
+				surchargePriceRate.append(surcharge)
+				scaleList = list()
+		count += 1
 
-					surchargePriceRate.append(surcharge)
-					scaleList = list()
-			count += 1
+	#get multipliers
+	multipliers = getMultipliers()
 
-		#get multipliers
-		multipliers = getMultipliers()
+	# Define condition key list
+	conditionKey = list()
+	# Build the Surcharge structure
+	is_added = False
+	for matCode in pricingMatCodeList:
+		# initialize variable key
+		varKey = ""
+		# check if there are surcharges
+		if surchargePriceRate:
+			for surcharge in surchargePriceRate:
 
-		# Define condition key list
-		conditionKey = list()
-		# Build the Surcharge structure
-		is_added = False
-		for matCode in pricingMatCodeList:
-			# initialize variable key
-			varKey = ""
-			# check if there are surcharges
-			if surchargePriceRate:
-				for surcharge in surchargePriceRate:
+				# get values // sql select -> to optimise
+				# if no corresponding condition is met in custom table, it will skip
+				condType, priority, tableNum = get_Surcharge_Conditions(flags, surcharge["SurchargeCode"])
 
-					# get values // sql select -> to optimise
-					# if no corresponding condition is met in custom table, it will skip
-					condType, priority, tableNum = get_Surcharge_Conditions(sold2, shipTo2, endCust2, endUseObject2, surcharge["SurchargeCode"])
-
-					if tableNum == "":
-						Trace.Write("[TRACE]"+surcharge["SurchargeCode"])
-						continue
+				if tableNum == "":
+					Trace.Write("[TRACE]"+surcharge["SurchargeCode"])
+					continue
 #BUILDING VARIABLE KEY----------------------------------------------------------
-					#get fields to build the access sequence
-					erpTable = getErpTable(tableNum)
-					#get length of variable key
-					count = 0
-					for row in erpTable:
-						count += row.LENGTH
+				#get fields to build the access sequence
+				erpTable = getErpTable(tableNum)
+				#get length of variable key
+				count = 0
+				for row in erpTable:
+					count += row.LENGTH
 
-					# check if Sold-To list is not empty
-					if allSoldToList:
-						for soldTos in allSoldToList:
-							# check if Ship-To list is not empty
-							if allShipToList:
-								for shipTos in allShipToList:
-									for record in multipliers:
-										varKey = getVarKey(
-															erpTable,
-															soldTos[4:-1], 	#Sold-to party
-															shipTos[4:-1],	#Ship-to party
-															sOrg,			#sales organisation
-															distCh, 		#Distribution Channel
-															matCode,		#Pricing Ref. Matl
-															endCustCde,		#End user
-															endObjCde,		#end use object
-															ctry,			#destination country
-															currency,		#Document Currency
-															cat,			#Brand Category
-															region,			#Region
-															record			#Multipliers
-															)
-										if count == len(varKey):
-											for key in conditionKey:
-												if key["VariableKey"] == varKey and key["ConditionType"] == condType:
-													is_added = True
-													break
-												else:
-													is_added = False
-											if not is_added:
-												conditionKey.append(get_price_content(tableNum, condType, varKey, sOrg, distCh, divOrg))
-											varKey = ""
-											break
-							else:
+				# check if Sold-To list is not empty
+				if allSoldToList:
+					for soldTos in allSoldToList:
+						# check if Ship-To list is not empty
+						if allShipToList:
+							for shipTos in allShipToList:
 								for record in multipliers:
 									varKey = getVarKey(
 														erpTable,
 														soldTos[4:-1], 	#Sold-to party
-														"",				#Ship-to party
+														shipTos[4:-1],	#Ship-to party
 														sOrg,			#sales organisation
 														distCh, 		#Distribution Channel
 														matCode,		#Pricing Ref. Matl
@@ -378,45 +353,70 @@ try:
 											conditionKey.append(get_price_content(tableNum, condType, varKey, sOrg, distCh, divOrg))
 										varKey = ""
 										break
-					else:
-						for record in multipliers:
-							varKey = getVarKey(
-												erpTable,
-												"",				#Sold-to party
-												"",				#Ship-to party
-												sOrg,			#sales organisation
-												distCh, 		#Distribution Channel
-												matCode,		#Pricing Ref. Matl
-												endCustCde,		#End user
-												endObjCde,		#end use object
-												ctry,			#destination country
-												currency,		#Document Currency
-												cat,			#Brand Category
-												region,			#Region
-												record			#Multipliers
-												)
-							if count == len(varKey):
-								for key in conditionKey:
-									if key["VariableKey"] == varKey and key["ConditionType"] == condType:
-										is_added = True
-										break
-									else:
-										is_added = False
-								if not is_added:
-									conditionKey.append(get_price_content(tableNum, condType, varKey, sOrg, distCh, divOrg))
-								varKey = ""
-								break
-		# build pricing data
-		pricingData	 = price_cond(conditionKey)
-		# serialize the data
-		priceDataJson   = RestClient.SerializeToJson(pricingData)
+						else:
+							for record in multipliers:
+								varKey = getVarKey(
+													erpTable,
+													soldTos[4:-1], 	#Sold-to party
+													"",				#Ship-to party
+													sOrg,			#sales organisation
+													distCh, 		#Distribution Channel
+													matCode,		#Pricing Ref. Matl
+													endCustCde,		#End user
+													endObjCde,		#end use object
+													ctry,			#destination country
+													currency,		#Document Currency
+													cat,			#Brand Category
+													region,			#Region
+													record			#Multipliers
+													)
+								if count == len(varKey):
+									for key in conditionKey:
+										if key["VariableKey"] == varKey and key["ConditionType"] == condType:
+											is_added = True
+											break
+										else:
+											is_added = False
+									if not is_added:
+										conditionKey.append(get_price_content(tableNum, condType, varKey, sOrg, distCh, divOrg))
+									varKey = ""
+									break
+				else:
+					for record in multipliers:
+						varKey = getVarKey(
+											erpTable,
+											"",				#Sold-to party
+											"",				#Ship-to party
+											sOrg,			#sales organisation
+											distCh, 		#Distribution Channel
+											matCode,		#Pricing Ref. Matl
+											endCustCde,		#End user
+											endObjCde,		#end use object
+											ctry,			#destination country
+											currency,		#Document Currency
+											cat,			#Brand Category
+											region,			#Region
+											record			#Multipliers
+											)
+						if count == len(varKey):
+							for key in conditionKey:
+								if key["VariableKey"] == varKey and key["ConditionType"] == condType:
+									is_added = True
+									break
+								else:
+									is_added = False
+							if not is_added:
+								conditionKey.append(get_price_content(tableNum, condType, varKey, sOrg, distCh, divOrg))
+							varKey = ""
+							break
+	# build pricing data
+	pricingData	 = price_cond(conditionKey)
+	# serialize the data
+	priceDataJson   = RestClient.SerializeToJson(pricingData)
 
-		# Compress the xml data
-		import zlib
-		compressedPayload = zlib.compress(priceDataJson)
+	# Compress the xml data
+	import zlib
+	compressedPayload = zlib.compress(priceDataJson)
 
-		# assign the data to hidden attribute - BO_SURCHARGE_ECC
-		Product.Attr('BO_SURCHARGE_ECC').AssignValue(compressedPayload)
-
-except Exception as e:
-	Trace.Write("Error in script BO_SurchargeConditions_OnAddUpdate--> "+str(e))
+	# assign the data to hidden attribute - BO_SURCHARGE_ECC
+	Product.Attr('BO_SURCHARGE_ECC').AssignValue(compressedPayload)
