@@ -294,6 +294,7 @@ try:
 		# Define condition key list
 		conditionKey = list()
 		# Build the Surcharge structure
+		is_added = False
 		for matCode in pricingMatCodeList:
 			# initialize variable key
 			varKey = ""
@@ -306,6 +307,7 @@ try:
 					condType, priority, tableNum = get_Surcharge_Conditions(sold2, shipTo2, endCust2, endUseObject2, surcharge["SurchargeCode"])
 
 					if tableNum == "":
+						Trace.Write("[TRACE]"+surcharge["SurchargeCode"])
 						continue
 #BUILDING VARIABLE KEY----------------------------------------------------------
 					#get fields to build the access sequence
@@ -338,8 +340,16 @@ try:
 															record			#Multipliers
 															)
 										if count == len(varKey):
-											conditionKey.append(get_price_content(tableNum, condType, varKey, sOrg, distCh, divOrg))
+											for key in conditionKey:
+												if key["VariableKey"] == varKey and key["ConditionType"] == condType:
+													is_added = True
+													break
+												else:
+													is_added = False
+											if not is_added:
+												conditionKey.append(get_price_content(tableNum, condType, varKey, sOrg, distCh, divOrg))
 											varKey = ""
+											break
 							else:
 								for record in multipliers:
 									varKey = getVarKey(
@@ -358,8 +368,16 @@ try:
 														record			#Multipliers
 														)
 									if count == len(varKey):
-										conditionKey.append(get_price_content(tableNum, condType, varKey, sOrg, distCh, divOrg))
+										for key in conditionKey:
+											if key["VariableKey"] == varKey and key["ConditionType"] == condType:
+												is_added = True
+												break
+											else:
+												is_added = False
+										if not is_added:
+											conditionKey.append(get_price_content(tableNum, condType, varKey, sOrg, distCh, divOrg))
 										varKey = ""
+										break
 					else:
 						for record in multipliers:
 							varKey = getVarKey(
@@ -378,8 +396,16 @@ try:
 												record			#Multipliers
 												)
 							if count == len(varKey):
-								conditionKey.append(get_price_content(tableNum, condType, varKey, sOrg, distCh, divOrg))
+								for key in conditionKey:
+									if key["VariableKey"] == varKey and key["ConditionType"] == condType:
+										is_added = True
+										break
+									else:
+										is_added = False
+								if not is_added:
+									conditionKey.append(get_price_content(tableNum, condType, varKey, sOrg, distCh, divOrg))
 								varKey = ""
+								break
 		# build pricing data
 		pricingData	 = price_cond(conditionKey)
 		# serialize the data
