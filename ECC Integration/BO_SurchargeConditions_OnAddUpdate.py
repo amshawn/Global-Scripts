@@ -156,8 +156,10 @@ def getVarKey(
 			variableKey = variableKey + endCust.zfill(line.LENGTH)
 		elif line.SAP_FIELD == "ZZVCENDUSEOBJCT": #end use object
 			variableKey = variableKey + endObj.ljust(line.LENGTH)
+		elif line.SAP_FIELD == "ZZLOADLVL": #end use object
+			variableKey = variableKey + " ".ljust(line.LENGTH)
 		elif line.SAP_FIELD == "AUART": #Order Type
-			variableKey = variableKey + ""
+			variableKey = variableKey + " "
 		elif line.SAP_FIELD == "LAND1": #Destination Country
 			variableKey = variableKey + ctry.ljust(line.LENGTH)
 		elif line.SAP_FIELD == "WAERK": #Document Currency
@@ -269,7 +271,10 @@ if Product.Attributes.GetByName("BO_HIDDEN_ATTRIBUTE_SURCHARGE").GetValue() == "
 			elif row["BO_CODE"] != surchargeContainer.Rows[count]["BO_CODE"]: #new surcharge
 				isLastRow = True
 			else:
-				isLastRow = False
+				if scale:
+					isLastRow = False
+				else:
+					isLastRow = True
 
 			if isLastRow:
 				surcharge = dict()
