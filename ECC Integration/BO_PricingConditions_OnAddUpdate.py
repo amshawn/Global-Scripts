@@ -63,6 +63,48 @@ def price_cond(conditionKey):
 	priceCond["ConditionKey"]	= conditionKey
 	return priceCond
 
+#build variable key
+def getVarKey(variableKey,
+				erpTable,
+				soldTos, 	#Sold-to party
+				shipTos,	#Ship-to party
+				sOrg,		#sales organisation
+				distCh, 	#Distribution Channel
+				matCode,	#Pricing Ref. Matl
+				endCust,	#End user
+				endObj		#end use object
+				):
+	#buid variable key
+	for line in erpTable:
+		if line.SAP_FIELD == "VKORG": #sales organisation
+			variableKey = variableKey + sOrg
+		elif line.SAP_FIELD == "VTWEG": #Distribution Channel
+			variableKey = variableKey + distCh
+		elif line.SAP_FIELD == "SPART": #Division
+			variableKey = variableKey + divOrg
+		elif line.SAP_FIELD == "KUNNR": #Sold-to party
+			variableKey = variableKey + soldTos.zfill(line.LENGTH)
+		elif line.SAP_FIELD == "PMATN": #Pricing Ref. Matl
+			variableKey = variableKey + matCode.ljust(line.LENGTH)
+		elif line.SAP_FIELD == "KUNWE": #Ship-to party
+			variableKey = variableKey + shipTos.zfill(line.LENGTH)
+		elif line.SAP_FIELD == "ZZCUSZE": #End user
+			variableKey = variableKey + endCust.zfill(line.LENGTH)
+		elif line.SAP_FIELD == "ZZVCENDUSEOBJCT": #end use object
+			variableKey = variableKey + soldTos.zfill(line.LENGTH)
+		elif line.SAP_FIELD == "ZZHIEZU01": #CustomerHierarchy01
+			variableKey = variableKey + "".zfill(line.LENGTH)
+	return variableKey
+
+#get ECC fields for table
+def getErpTable(tableNum):
+	table = SqlHelper.GetList("""
+	SELECT *
+	FROM MG_TABLE_ECC
+	WHERE TABLE_NAME = '{tableName}'
+	""".format(tableName=tableNum))
+	return table
+
 # Harded coded for testing purposes, as the info is not on CPQ yet
 #/!\# to change - Start #/!\#
 sOrg		= "1000"
@@ -92,7 +134,9 @@ try:
 	soldTo 			= Product.Attributes.GetByName("MG_SOLD_TO").GetValue()
 	shipTo 			= Product.Attributes.GetByName("MG_SHIP_TO").GetValue()
 	endCust 		= Product.Attributes.GetByName("MG_END_CUSTOMER").GetValue()
+	endCustCde		= Product.Attributes.GetByName("MG_END_CUSTOMER").SelectedValue.ValueCode[4:] if Product.Attributes.GetByName("MG_END_CUSTOMER").SelectedValue else ""
 	endUseObject 	= Product.Attributes.GetByName("MG_END_USE_OBJECT").GetValue()
+	endObjCde		= Product.Attributes.GetByName("MG_END_USE_OBJECT").SelectedValue.ValueCode if Product.Attributes.GetByName("MG_END_USE_OBJECT").SelectedValue else ""
 
 	# check if attribute is empty, else assign 'X'
 	sold2  			= "" if (soldTo is None or soldTo == "") else "X"
@@ -112,6 +156,9 @@ try:
 	condType 			= sqlResult.COND_TYPE
 	priority 			= sqlResult.PRIORITY
 	tableNum 			= sqlResult.TABLE_NUM
+
+	#get fields to build the access sequence
+	erpTable = getErpTable(tableNum)
 
 	# Read the value of hidden attribute "Sold-To"
 	allSoldTo 			= Product.Attributes.GetByName("MG_SOLD_TO_VALUECODES").GetValue()
@@ -145,52 +192,66 @@ try:
 
 	# Build the Pricing structure
 	for matCode in pricingMatCodeList:
+		# initialize variable key
+		varKey = ""
 		# get the price for material
 		rate = pricingMatPrice[matCode]
 		# check if Sold-To list is not empty
 		if allSoldToList:
 			for soldTos in allSoldToList:
-				# build variable key
-				variableKey = sOrg + distCh + divOrg + soldTos[3:-1] + matCode
-				# add the pricing content to 'condition key'
-				conditionKey.append(get_price_content(tableNum, condType, variableKey, sOrg, distCh, divOrg))
-		# check if Ship-To list is not empty
-		if allShipToList:
-			for shipTos in allShipToList:
-				# build variable key
-				variableKey = sOrg + distCh + divOrg + shipTos[3:-1] + matCode
-				# add the pricing content to 'condition key'
-				conditionKey.append(get_price_content(tableNum, condType, variableKey, sOrg, distCh, divOrg))
-
+				# check if Ship-To list is not empty
+				if allShipToList:
+					for shipTos in allShipToList:
+						# build variable key
+						varKey = getVarKey(varKey,
+											erpTable,
+											soldTos[4:-1], 	#Sold-to party
+											shipTos[4:-1],	#Ship-to party
+											sOrg,			#sales organisation
+											distCh, 		#Distribution Channel
+											matCode,		#Pricing Ref. Matl
+											endCustCde,		#End user
+											endObjCde		#end use object
+											)
+						# add the pricing content to 'condition key'
+						conditionKey.append(get_price_content(tableNum, condType, varKey, sOrg, distCh, divOrg))
+						varKey = ""
+				else:
+					varKey = getVarKey(varKey,
+										erpTable,
+										soldTos[4:-1], 	#Sold-to party
+										"",				#Ship-to party
+										sOrg,			#sales organisation
+										distCh, 		#Distribution Channel
+										matCode,		#Pricing Ref. Matl
+										endCustCde,		#End user
+										endObjCde		#end use object
+										)
+					conditionKey.append(get_price_content(tableNum, ct, varKey, sOrg, distCh, divOrg))
+					varKey = ""		# check if Ship-To list is not empty
+		else:
+			varKey = getVarKey(varKey,
+								erpTable,
+								"",				#Sold-to party
+								"",				#Ship-to party
+								sOrg,			#sales organisation
+								distCh, 		#Distribution Channel
+								matCode,		#Pricing Ref. Matl
+								endCustCde,		#End user
+								endObjCde		#end use object
+								)
+			conditionKey.append(get_price_content(tableNum, ct, varKey, sOrg, distCh, divOrg))
+			varKey = ""
 
 	# build pricing data
 	pricingData	 = price_cond(conditionKey)
 	# serialize the data
 	priceDataJson   = RestClient.SerializeToJson(pricingData)
-	# make it xml
-	#priceDataXml	= str(JsonConvert.DeserializeXNode(priceDataJson, "root"))
-
-
-	# assign flag to hidden attr BO_PRICE_ECC_FLAG
-	#Product.Attr('BO_PRICE_ECC_FLAG').AssignValue("Pending")
-
-	# # Check the data
-	# myVal = Product.Attr('BO_PRICE_ECC').GetValue()
-
 	# Compress the xml data
 	import zlib
 	compressedPayload = zlib.compress(priceDataJson)
-
 	# assign the data to hidden attribute - BO_PRICE_ECC
 	Product.Attr('BO_PRICE_ECC').AssignValue(compressedPayload)
-	# qt = Quote.QuoteTables['BO_QTB_PRICING_COND']
-	# a = qt.AddNewRow()
-
-	# try:
-	#	 qt.Rows[0].SetColumnValue('XML', compressedPayload)
-	#	 qt.Save()
-	# except Exception as e:
-	#	 Trace.Write("Error -> " +str(e))
 
 except Exception as e:
 	Trace.Write("Error in script BO_PricingConditions_OnAddUpdate--> "+str(e))
