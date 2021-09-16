@@ -114,11 +114,12 @@ def getErpTable(tableNum):
 	return table
 
 #get multipliers
-def getMultipliers():
+def getMultipliers(fields):
 	table = SqlHelper.GetList("""
-	SELECT *
+	SELECT *, 'False' as IS_USED
 	FROM MG_MULTIPLIERS_ECC
-	""")
+	WHERE SAP_FIELD IN {}
+	""".format(fields))
 	return table
 
 #build variable key
@@ -135,10 +136,11 @@ def getVarKey(
 				currency,		#Document Currency
 				cat,			#Brand Category
 				region,			#Region
-				record			#Multipliers
+				envLbl			#Environmental label
 				):
-	#buid variable key
+	#build variable key
 	variableKey = ""
+
 	for line in erpTable:
 		if line.SAP_FIELD == "VKORG": #sales organisation
 			variableKey = variableKey + sOrg
@@ -159,7 +161,7 @@ def getVarKey(
 		elif line.SAP_FIELD == "ZZLOADLVL": #end use object
 			variableKey = variableKey + " ".ljust(line.LENGTH)
 		elif line.SAP_FIELD == "AUART": #Order Type
-			variableKey = variableKey + " "
+			variableKey = variableKey + " ".ljust(line.LENGTH)
 		elif line.SAP_FIELD == "LAND1": #Destination Country
 			variableKey = variableKey + ctry.ljust(line.LENGTH)
 		elif line.SAP_FIELD == "WAERK": #Document Currency
@@ -170,9 +172,60 @@ def getVarKey(
 			variableKey = variableKey + soldTos.zfill(line.LENGTH)
 		elif line.SAP_FIELD == "ZZHIEZU01": #CustomerHierarchy01
 			variableKey = variableKey + " ".zfill(line.LENGTH)
-		elif record.SAP_FIELD.strip() == line.SAP_FIELD.strip():
+		elif line.SAP_FIELD == "ZZLABEL_ENVIR": #Environmental label
+			variableKey = variableKey + envLbl.ljust(line.LENGTH)
+	return variableKey
+
+def addMultiplier(variableKey, erpTable, record):#Multipliers
+	for line in erpTable:
+		if record.SAP_FIELD.strip() == line.SAP_FIELD.strip():
 			variableKey = variableKey + record.VALUE.ljust(line.LENGTH)
 	return variableKey
+
+def getMultiplier(field):
+	table = SqlHelper.GetList("""
+	SELECT *
+	FROM MG_MULTIPLIERS_ECC
+	WHERE SAP_FIELD = '{}'
+	""".format(field))
+	return table
+
+#create variant keys for multipliers
+def getMultiplierKeys(varKey, erpTable, count, conditionKey, tableNum, condType, sOrg, distCh, divOrg):
+	multiplierKeys = []
+
+	for line in reversed(erpTable):
+		multipliers = getMultiplier(line.SAP_FIELD.strip())
+
+		if len(multiplierKeys) <= 0:
+			for multiplier in multipliers:
+				multiplierKeys.append(multiplier.VALUE.ljust(line.LENGTH))
+		else:
+			temp = []
+			for myKey in multiplierKeys:
+				for multiplier in multipliers:
+					temp.append(multiplier.VALUE.ljust(line.LENGTH) + myKey)
+
+			if multipliers:
+				multiplierKeys = temp
+
+	for myKey in multiplierKeys:
+		 	myKey = varKey + myKey
+			conditionKey.append(get_price_content(tableNum, condType, myKey, sOrg, distCh, divOrg))
+
+	is_added = False
+	if not multiplierKeys:
+		if count == len(varKey):
+			for key in conditionKey:
+				if key["VariableKey"] == varKey and key["ConditionType"] == condType:
+					is_added = True
+					break
+				else:
+					is_added = False
+			if not is_added:
+				conditionKey.append(get_price_content(tableNum, condType, varKey, sOrg, distCh, divOrg))
+
+	return conditionKey
 
 
 # Harded coded for testing purposes, as the info is not on CPQ yet
@@ -279,6 +332,8 @@ if Product.Attributes.GetByName("BO_HIDDEN_ATTRIBUTE_SURCHARGE").GetValue() == "
 			if isLastRow:
 				surcharge = dict()
 				surcharge["SurchargeCode"] = row["BO_CODE"]
+				surcharge["EnvironmentalLabel"] = row["ENV_LBL"]
+
 				if len(scale) > 0:
 					#add last line for 0
 					scale = dict()
@@ -296,20 +351,22 @@ if Product.Attributes.GetByName("BO_HIDDEN_ATTRIBUTE_SURCHARGE").GetValue() == "
 				scaleList = list()
 		count += 1
 
-	#get multipliers
-	multipliers = getMultipliers()
-
 	# Define condition key list
 	conditionKey = list()
 	# Build the Surcharge structure
 	is_added = False
+#no materials/grammages in price sheets
+	if not pricingMatCodeList:
+		pricingMatCodeList.append(None)
+#for each material generate a variable key
 	for matCode in pricingMatCodeList:
 		# initialize variable key
 		varKey = ""
 		# check if there are surcharges
 		if surchargePriceRate:
 			for surcharge in surchargePriceRate:
-
+				#get Environmental label
+				envLbl = surcharge["EnvironmentalLabel"]
 				# get values // sql select -> to optimise
 				# if no corresponding condition is met in custom table, it will skip
 				condType, priority, tableNum = get_Surcharge_Conditions(flags, surcharge["SurchargeCode"])
@@ -331,39 +388,10 @@ if Product.Attributes.GetByName("BO_HIDDEN_ATTRIBUTE_SURCHARGE").GetValue() == "
 						# check if Ship-To list is not empty
 						if allShipToList:
 							for shipTos in allShipToList:
-								for record in multipliers:
-									varKey = getVarKey(
-														erpTable,
-														soldTos[4:-1], 	#Sold-to party
-														shipTos[4:-1],	#Ship-to party
-														sOrg,			#sales organisation
-														distCh, 		#Distribution Channel
-														matCode,		#Pricing Ref. Matl
-														endCustCde,		#End user
-														endObjCde,		#end use object
-														ctry,			#destination country
-														currency,		#Document Currency
-														cat,			#Brand Category
-														region,			#Region
-														record			#Multipliers
-														)
-									if count == len(varKey):
-										for key in conditionKey:
-											if key["VariableKey"] == varKey and key["ConditionType"] == condType:
-												is_added = True
-												break
-											else:
-												is_added = False
-										if not is_added:
-											conditionKey.append(get_price_content(tableNum, condType, varKey, sOrg, distCh, divOrg))
-										varKey = ""
-										break
-						else:
-							for record in multipliers:
 								varKey = getVarKey(
 													erpTable,
 													soldTos[4:-1], 	#Sold-to party
-													"",				#Ship-to party
+													shipTos[4:-1],	#Ship-to party
 													sOrg,			#sales organisation
 													distCh, 		#Distribution Channel
 													matCode,		#Pricing Ref. Matl
@@ -373,47 +401,46 @@ if Product.Attributes.GetByName("BO_HIDDEN_ATTRIBUTE_SURCHARGE").GetValue() == "
 													currency,		#Document Currency
 													cat,			#Brand Category
 													region,			#Region
-													record			#Multipliers
+													envLbl			#Environmental label
 													)
-								if count == len(varKey):
-									for key in conditionKey:
-										if key["VariableKey"] == varKey and key["ConditionType"] == condType:
-											is_added = True
-											break
-										else:
-											is_added = False
-									if not is_added:
-										conditionKey.append(get_price_content(tableNum, condType, varKey, sOrg, distCh, divOrg))
-									varKey = ""
-									break
+								conditionKey = getMultiplierKeys(varKey, erpTable, count, conditionKey, tableNum, condType, sOrg, distCh, divOrg)
+						else:
+							varKey = getVarKey(
+												erpTable,
+												soldTos[4:-1], 	#Sold-to party
+												"",				#Ship-to party
+												sOrg,			#sales organisation
+												distCh, 		#Distribution Channel
+												matCode,		#Pricing Ref. Matl
+												endCustCde,		#End user
+												endObjCde,		#end use object
+												ctry,			#destination country
+												currency,		#Document Currency
+												cat,			#Brand Category
+												region,			#Region
+												envLbl			#Environmental label
+												)
+
+							conditionKey = getMultiplierKeys(varKey, erpTable, count, conditionKey, tableNum, condType, sOrg, distCh, divOrg)
+
 				else:
-					for record in multipliers:
-						varKey = getVarKey(
-											erpTable,
-											"",				#Sold-to party
-											"",				#Ship-to party
-											sOrg,			#sales organisation
-											distCh, 		#Distribution Channel
-											matCode,		#Pricing Ref. Matl
-											endCustCde,		#End user
-											endObjCde,		#end use object
-											ctry,			#destination country
-											currency,		#Document Currency
-											cat,			#Brand Category
-											region,			#Region
-											record			#Multipliers
-											)
-						if count == len(varKey):
-							for key in conditionKey:
-								if key["VariableKey"] == varKey and key["ConditionType"] == condType:
-									is_added = True
-									break
-								else:
-									is_added = False
-							if not is_added:
-								conditionKey.append(get_price_content(tableNum, condType, varKey, sOrg, distCh, divOrg))
-							varKey = ""
-							break
+					varKey = getVarKey(
+										erpTable,
+										"",				#Sold-to party
+										"",				#Ship-to party
+										sOrg,			#sales organisation
+										distCh, 		#Distribution Channel
+										matCode,		#Pricing Ref. Matl
+										endCustCde,		#End user
+										endObjCde,		#end use object
+										ctry,			#destination country
+										currency,		#Document Currency
+										cat,			#Brand Category
+										region,			#Region
+										envLbl			#Environmental label
+										)
+
+					conditionKey = getMultiplierKeys(varKey, erpTable, count, conditionKey, tableNum, condType, sOrg, distCh, divOrg)
 	# build pricing data
 	pricingData	 = price_cond(conditionKey)
 	# serialize the data
